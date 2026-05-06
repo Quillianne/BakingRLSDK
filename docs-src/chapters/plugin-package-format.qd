@@ -17,7 +17,14 @@ BakingRL v2 packages are described by `bakingrl.plugin.json`.
     "visuals": {
       "scoreboard": {
         "entry": "dist/visuals/scoreboard.js",
-        "defaultSize": [760, 128]
+        "defaultSize": [760, 128],
+        "settings": "schemas/scoreboard-settings.json"
+      }
+    },
+    "layouts": {
+      "stream": {
+        "path": "templates/stream-layout.json",
+        "title": "Stream Layout"
       }
     }
   }
@@ -31,6 +38,46 @@ BakingRL v2 packages are described by `bakingrl.plugin.json`.
 - `exports.services`: sandboxed backend modules with callable methods.
 - `exports.connectors`: backend modules with explicit network permissions.
 - `exports.pages`: importable page templates.
+- `exports.layouts`: importable overlay layout templates.
+
+## Visual Instance Settings
+
+`exports.visuals.<name>.settings` can point to a JSON Schema file. BakingRL uses
+that schema to render typed instance settings in the page and layout editors,
+instead of forcing users to edit raw JSON.
+
+Supported field shapes in the current host UI:
+
+- `type: "string"`, including `format: "color"`;
+- `type: "number"` or `type: "integer"`;
+- `type: "boolean"`;
+- `enum`, `oneOf`, or `anyOf` options with primitive values;
+- `type: "array"` with primitive options declared on `items`.
+
+```json
+{
+  "type": "object",
+  "title": "Scoreboard Settings",
+  "properties": {
+    "accent": {
+      "type": "string",
+      "format": "color",
+      "default": "#38bdf8"
+    },
+    "showBoost": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}
+```
+
+## Layout Templates
+
+`exports.layouts` contains templates for overlay layouts. A template is
+imported into BakingRL's host-owned layout list; it does not create an overlay
+runtime by itself. Users can then route the imported layout to the in-game
+overlay or OBS stream output.
 
 ## Distribution Bundle
 
@@ -46,6 +93,7 @@ Supported:
 dist/
 assets/
 schemas/
+templates/
 manifest.hashes.json
 signature.ed25519
 ```

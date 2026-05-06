@@ -50,6 +50,9 @@ function validatePackage(packageDir) {
   if (!manifest.exports || typeof manifest.exports !== "object") {
     fail("manifest.exports is required");
   }
+  if (manifest.exports.overlays) {
+    fail("manifest.exports.overlays has been renamed to manifest.exports.layouts");
+  }
   const entryGroups = [
     ["visuals", manifest.exports.visuals ?? {}],
     ["components", manifest.exports.components ?? {}],
@@ -75,17 +78,22 @@ function validatePackage(packageDir) {
       }
     }
   }
-  for (const [name, exportDef] of Object.entries(manifest.exports.pages ?? {})) {
-    exportCount += 1;
-    if (typeof exportDef.path !== "string" || exportDef.path.trim() === "") {
-      fail(`pages.${name}.path must point to a page template JSON file`);
-    }
-    const pagePath = resolve(packageDir, exportDef.path);
-    if (!isInsideDirectory(packageDir, pagePath)) {
-      fail(`pages.${name}.path must stay inside the package`);
-    }
-    if (!existsSync(pagePath)) {
-      fail(`Page template does not exist: ${exportDef.path}`);
+  for (const [groupName, label, group] of [
+    ["pages", "Page", manifest.exports.pages ?? {}],
+    ["layouts", "Layout", manifest.exports.layouts ?? {}]
+  ]) {
+    for (const [name, exportDef] of Object.entries(group)) {
+      exportCount += 1;
+      if (typeof exportDef.path !== "string" || exportDef.path.trim() === "") {
+        fail(`${groupName}.${name}.path must point to a ${label.toLowerCase()} template JSON file`);
+      }
+      const templatePath = resolve(packageDir, exportDef.path);
+      if (!isInsideDirectory(packageDir, templatePath)) {
+        fail(`${groupName}.${name}.path must stay inside the package`);
+      }
+      if (!existsSync(templatePath)) {
+        fail(`${label} template does not exist: ${exportDef.path}`);
+      }
     }
   }
   if (exportCount === 0) fail("Package must export at least one capability");

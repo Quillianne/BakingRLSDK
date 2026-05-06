@@ -66,6 +66,7 @@ Validation checks that:
 - Required package fields are present.
 - Export entries point to built `.js` files inside the package.
 - Page templates stay inside the package.
+- Layout templates stay inside the package.
 
 ## Pack
 

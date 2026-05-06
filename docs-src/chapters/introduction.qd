@@ -19,6 +19,7 @@ A BakingRL plugin package can expose one or more capabilities:
 - Services running in a sandboxed backend runtime.
 - Connectors with explicit host-mediated HTTP and WebSocket permissions.
 - Page templates that users can import into BakingRL.
+- Overlay layout templates that users can import into BakingRL.
 
 ## Repository Layout
 
