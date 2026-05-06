@@ -1,0 +1,52 @@
+.docname {Security Model}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+BakingRL uses a host-enforced permission model. Plugin code is not trusted.
+
+## Host Authority
+
+The Rust host owns:
+
+- package installation and bundle extraction;
+- manifest parsing and effective permissions;
+- telemetry ingestion;
+- registry reads and writes;
+- service RPC;
+- component imports;
+- network access for connectors;
+- storage access.
+
+SDK helpers improve authoring ergonomics but are not a security boundary.
+
+## Package Boundaries
+
+Packages cannot import each other directly. Cross-package access must go through
+host-mediated imports and permissions.
+
+Examples:
+
+- A visual loads a component with `context.components.load("package/export")`.
+- A visual calls a service with `context.services.call("package/service", method, input)`.
+- A service writes only under permitted `plugin.<package-id>.*` registry keys.
+- A connector can call only declared HTTP or WebSocket hosts.
+
+## Bundle Safety
+
+The host rejects bundles with:
+
+- absolute paths;
+- `../` path traversal;
+- symlinks;
+- oversized files;
+- oversized total uncompressed size;
+- hash mismatches;
+- invalid Ed25519 signatures.
+
+## Practical Guidance
+
+- Request the smallest permission set possible.
+- Keep secrets outside package source.
+- Treat all telemetry and settings input as untrusted.
+- Prefer explicit service methods over broad registry writes.

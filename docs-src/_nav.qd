@@ -1,0 +1,10 @@
+- Guides
+  - [Introduction](chapters/introduction.qd)
+  - [Getting Started](chapters/getting-started.qd)
+- Reference
+  - [SDK API](chapters/sdk-api.qd)
+  - [Plugin Package Format](chapters/plugin-package-format.qd)
+  - [Package CLI](chapters/package-cli.qd)
+  - [Telemetry Types](chapters/telemetry-types.qd)
+- Security
+  - [Security Model](chapters/security-model.qd)

@@ -1,0 +1,64 @@
+.docname {Plugin Package Format}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+BakingRL v2 packages are described by `bakingrl.plugin.json`.
+
+## Minimal Manifest
+
+```json
+{
+  "schema": "bakingrl.plugin/2",
+  "id": "com.example.my-package",
+  "name": "My Package",
+  "version": "1.0.0",
+  "exports": {
+    "visuals": {
+      "scoreboard": {
+        "entry": "dist/visuals/scoreboard.js",
+        "defaultSize": [760, 128]
+      }
+    }
+  }
+}
+```
+
+## Export Types
+
+- `exports.visuals`: browser ESM modules mounted in overlays and pages.
+- `exports.components`: reusable visual components loaded by visuals.
+- `exports.services`: sandboxed backend modules with callable methods.
+- `exports.connectors`: backend modules with explicit network permissions.
+- `exports.pages`: importable page templates.
+
+## Distribution Bundle
+
+The `.brlp` format is a ZIP archive. Required:
+
+```txt
+bakingrl.plugin.json
+```
+
+Supported:
+
+```txt
+dist/
+assets/
+schemas/
+manifest.hashes.json
+signature.ed25519
+```
+
+The helper CLI can generate hashes, signatures, and `.brlp` archives.
+
+```sh
+npm run pack
+npm run keygen -- signing-key.json
+npm run pack -- --sign signing-key.json
+```
+
+## Versioning
+
+Use semantic versions in package manifests. BakingRL treats package IDs as
+stable identities, so avoid changing an ID after publishing.

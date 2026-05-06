@@ -1,0 +1,15 @@
+{
+  "name": "create-bakingrl-plugin",
+  "version": "0.2.0",
+  "description": "Create BakingRL plugin packages from official templates.",
+  "type": "module",
+  "bin": {
+    "create-bakingrl-plugin": "bin/create-bakingrl-plugin.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "templates"
+  ],
+  "license": "MIT"
+}

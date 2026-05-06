@@ -1,0 +1,35 @@
+.docname {Introduction}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+BakingRL SDK contains the TypeScript contracts, helper functions, and package
+scaffolding tools used to build BakingRL plugin packages.
+
+This documentation is for plugin authors. If you want to run the desktop
+application, use the `BakingRL` repository. If you want maintained first-party
+plugins, use the `BakingRLPlugins` repository.
+
+## What You Can Build
+
+A BakingRL plugin package can expose one or more capabilities:
+
+- Visuals rendered in overlays, OBS browser sources, or custom pages.
+- Components imported by other visual exports through the host.
+- Services running in a sandboxed backend runtime.
+- Connectors with explicit host-mediated HTTP and WebSocket permissions.
+- Page templates that users can import into BakingRL.
+
+## Repository Layout
+
+```txt
+packages/plugin-sdk/              TypeScript SDK published as @bakingrl/plugin-sdk
+packages/create-bakingrl-plugin/  Scaffolder and package helper CLI
+docs-src/                         Quarkdown source documentation
+docs-site/                        Generated documentation output
+```
+
+## Compatibility
+
+This SDK targets BakingRL plugin package schema `bakingrl.plugin/2` and SDK
+version `0.2.x`.

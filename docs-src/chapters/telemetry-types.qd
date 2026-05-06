@@ -1,0 +1,50 @@
+.docname {Telemetry Types}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+The SDK exports Rocket League telemetry event names and payload types.
+
+```ts
+import type {
+  RlTelemetryEventName,
+  RlTelemetryPayloadByEvent
+} from "@bakingrl/plugin-sdk";
+```
+
+## Typed Subscription Example
+
+```ts
+context.bus.subscribe("UpdateState", (event) => {
+  const players = event.Data.Players;
+  const teams = event.Data.Game.Teams;
+});
+```
+
+## Supported Event Names
+
+The SDK currently models:
+
+- `UpdateState`
+- `BallHit`
+- `ClockUpdatedSeconds`
+- `CountdownBegin`
+- `CrossbarHit`
+- `GoalReplayEnd`
+- `GoalReplayStart`
+- `GoalReplayWillEnd`
+- `GoalScored`
+- `MatchCreated`
+- `MatchInitialized`
+- `MatchDestroyed`
+- `MatchEnded`
+- `MatchPaused`
+- `MatchUnpaused`
+- `PodiumStart`
+- `ReplayCreated`
+- `ReplayWillEnd`
+- `RoundStarted`
+- `StatfeedEvent`
+
+Use unknown-safe handling for plugin-defined events such as
+`plugin.com.example.package.state`.

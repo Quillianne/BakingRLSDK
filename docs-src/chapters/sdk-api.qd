@@ -1,0 +1,92 @@
+.docname {SDK API}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+The SDK exports TypeScript types and small helpers. Runtime security is enforced
+by the BakingRL host, not by SDK code.
+
+## Definition Helpers
+
+Use definition helpers to make exports explicit and well typed:
+
+```ts
+import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
+
+export default defineVisual({
+  mount(context: VisualContext) {
+    context.root.textContent = "Hello BakingRL";
+  }
+});
+```
+
+Available helpers:
+
+- `definePlugin(definition)`
+- `defineVisual(export)`
+- `defineComponent(export)`
+- `defineService(export)`
+- `defineConnector(export)`
+
+## Visual Context
+
+Visuals receive:
+
+- `root`: DOM node owned by the visual.
+- `package`: enabled package descriptor.
+- `exportName`: visual export name.
+- `item`: layout instance metadata.
+- `settings`: package settings merged with item settings.
+- `setActive(active)`: event-layer visibility hook.
+- `bus.subscribe(eventName, callback)`: telemetry subscription.
+- `registry.get(key)`: read-only registry access.
+- `components.load(ref)`: host-mediated component import.
+- `services.call(ref, method, input)`: host-mediated service RPC.
+- `assets.url(ref)`: package asset URL resolver.
+- `diagnostics`: structured logging surface.
+
+## Services
+
+Services run in the backend sandbox and expose callable methods:
+
+```ts
+import { defineService } from "@bakingrl/plugin-sdk";
+
+export default defineService({
+  methods: {
+    snapshot() {
+      return { ok: true };
+    }
+  }
+});
+```
+
+Services receive bus, registry, storage, settings, service RPC, and diagnostics
+through `ServiceContext`.
+
+## Connectors
+
+Connectors are service-like exports with network capabilities:
+
+```ts
+import { defineConnector, type ConnectorContext } from "@bakingrl/plugin-sdk";
+
+export default defineConnector({
+  async mount(context: ConnectorContext) {
+    context.diagnostics.log("connector ready");
+  }
+});
+```
+
+Network access must be declared in `bakingrl.plugin.json`. The host checks every
+HTTP and WebSocket request against effective permissions.
+
+## Settings Helper
+
+```ts
+import { setting } from "@bakingrl/plugin-sdk";
+
+const accent = setting(context.settings, "accent", "#ffffff");
+```
+
+`setting` returns a fallback when a key is missing or null.

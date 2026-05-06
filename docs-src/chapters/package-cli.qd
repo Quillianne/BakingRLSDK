@@ -1,0 +1,84 @@
+.docname {Package CLI}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+Generated packages include `scripts/bakingrl-plugin.mjs`.
+
+## Global Local Install
+
+Before npm publication, install the SDK repository globally:
+
+```sh
+cd BakingRLSDK
+npm install
+npm install -g .
+```
+
+This provides:
+
+```sh
+create-bakingrl-plugin
+bakingrl-plugin
+```
+
+Generated packages use the local SDK checkout through a `file:` dependency.
+
+After editing SDK types or runtime helpers:
+
+```sh
+npm run build
+```
+
+If you changed the generator, package helper, templates, or global command
+metadata:
+
+```sh
+npm install -g . --force
+```
+
+## Commands
+
+```sh
+npm run build
+npm run check
+npm run add -- visual boostMeter
+npm run add -- component PlayerCard
+npm run add -- service matchStats
+npm run add -- connector twitch
+npm run inspect
+npm run pack
+npm run keygen -- signing-key.json
+npm run sign -- --key signing-key.json
+npm run install:local
+```
+
+## Validate
+
+```sh
+node scripts/bakingrl-plugin.mjs validate
+```
+
+Validation checks that:
+
+- `bakingrl.plugin.json` exists.
+- The schema is `bakingrl.plugin/2`.
+- Required package fields are present.
+- Export entries point to built `.js` files inside the package.
+- Page templates stay inside the package.
+
+## Pack
+
+```sh
+node scripts/bakingrl-plugin.mjs pack
+```
+
+`pack` writes hashes, then creates a `.brlp` archive in `dist-bundles/`.
+
+## Install Locally
+
+```sh
+node scripts/bakingrl-plugin.mjs install-local
+```
+
+This copies the package into BakingRL's local app-data package directory.

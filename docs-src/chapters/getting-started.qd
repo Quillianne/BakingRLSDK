@@ -1,0 +1,105 @@
+.docname {Getting Started}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+This guide creates a complete BakingRL package with a visual, a component, a
+service, and a connector.
+
+## Prerequisites
+
+- Node.js 20 or newer.
+- npm 10 or newer.
+- A local BakingRL app checkout if you want to install and test packages.
+
+## Create A Package
+
+Recommended local setup before npm publication:
+
+```sh
+cd BakingRLSDK
+npm install
+npm install -g .
+```
+
+Create a package in a sibling plugin repository:
+
+```sh
+cd ../BakingRLPlugins
+create-bakingrl-plugin my-package
+cd my-package
+npm install
+```
+
+By default, a generator installed from `BakingRLSDK` uses the SDK from this
+checkout through a `file:` dependency.
+
+After editing SDK types or runtime helpers:
+
+```sh
+cd ../BakingRLSDK
+npm run build
+```
+
+If you changed the generator, package helper, templates, or global command
+metadata:
+
+```sh
+cd ../BakingRLSDK
+npm install -g . --force
+```
+
+From this repository without global install:
+
+```sh
+npm run create -- my-package
+cd my-package
+npm install
+```
+
+From npm, once the scaffolder is published:
+
+```sh
+npm create bakingrl-plugin my-package
+cd my-package
+npm install
+```
+
+## Build And Install Locally
+
+```sh
+npm run build
+npm run pack
+npm run install:local
+```
+
+`install:local` copies the package into BakingRL's app-data package directory:
+
+- Linux: `$XDG_DATA_HOME/com.quillianne.bakingrl/packages` or
+  `~/.local/share/com.quillianne.bakingrl/packages`
+- macOS: `~/Library/Application Support/com.quillianne.bakingrl/packages`
+- Windows: `%LOCALAPPDATA%/com.quillianne.bakingrl/packages`
+
+Set `BAKINGRL_PACKAGES_DIR` to override the target during development.
+
+## Test In BakingRL
+
+1. Start BakingRL with `npm run tauri dev` from the app repository.
+2. Open the Packages tab.
+3. Enable your package.
+4. Add visual exports to an overlay layout or custom page.
+5. Use the layout editor mock events to test event-driven visuals without
+   launching Rocket League.
+
+## Development Loop
+
+Use this loop for most plugin work:
+
+```sh
+npm run build
+npm run check
+npm run pack
+npm run install:local
+```
+
+Then reload packages in BakingRL.

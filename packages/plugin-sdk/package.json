@@ -1,0 +1,23 @@
+{
+  "name": "@bakingrl/plugin-sdk",
+  "version": "0.2.0",
+  "description": "Types and helpers for BakingRL plugin packages.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2"
+  }
+}

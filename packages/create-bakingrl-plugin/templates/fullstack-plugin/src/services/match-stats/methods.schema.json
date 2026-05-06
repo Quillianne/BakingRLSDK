@@ -1,0 +1,12 @@
+{
+  "methods": {
+    "snapshot": {
+      "input": { "type": "object" },
+      "output": {}
+    },
+    "reset": {
+      "input": { "type": "object" },
+      "output": { "type": "object" }
+    }
+  }
+}
