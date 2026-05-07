@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { homedir, platform } from "node:os";
 import { spawnSync } from "node:child_process";
+import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
 
@@ -129,6 +130,114 @@ function walkFiles(root, dir = root, output = [], excludedFiles = new Set()) {
 
 function sha256File(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+const crcTable = new Uint32Array(256);
+for (let index = 0; index < crcTable.length; index += 1) {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  crcTable[index] = value >>> 0;
+}
+
+function crc32(buffer) {
+  let value = 0xffffffff;
+  for (const byte of buffer) {
+    value = crcTable[(value ^ byte) & 0xff] ^ (value >>> 8);
+  }
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function zipDateTime(date) {
+  const year = Math.max(1980, date.getFullYear());
+  return {
+    time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+  };
+}
+
+function zipHeader(size) {
+  return Buffer.alloc(size);
+}
+
+function assertZip32(value, label) {
+  if (value > 0xffffffff) fail(`${label} is too large for .brlp ZIP32 archives.`);
+}
+
+function writeZipArchive(packageDir, bundlePath, excludedFiles = new Set()) {
+  const chunks = [];
+  const centralDirectory = [];
+  let offset = 0;
+
+  for (const file of walkFiles(packageDir, packageDir, [], excludedFiles)) {
+    const path = join(packageDir, file);
+    const contents = readFileSync(path);
+    const compressed = deflateRawSync(contents, { level: 9 });
+    const name = Buffer.from(file, "utf8");
+    const { time, date } = zipDateTime(statSync(path).mtime);
+    const checksum = crc32(contents);
+
+    assertZip32(offset, "ZIP local header offset");
+    assertZip32(compressed.length, `Compressed file '${file}'`);
+    assertZip32(contents.length, `File '${file}'`);
+
+    const local = zipHeader(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(time, 10);
+    local.writeUInt16LE(date, 12);
+    local.writeUInt32LE(checksum, 14);
+    local.writeUInt32LE(compressed.length, 18);
+    local.writeUInt32LE(contents.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    local.writeUInt16LE(0, 28);
+
+    chunks.push(local, name, compressed);
+
+    const central = zipHeader(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt16LE(time, 12);
+    central.writeUInt16LE(date, 14);
+    central.writeUInt32LE(checksum, 16);
+    central.writeUInt32LE(compressed.length, 20);
+    central.writeUInt32LE(contents.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centralDirectory.push(central, name);
+
+    offset += local.length + name.length + compressed.length;
+  }
+
+  const centralOffset = offset;
+  const centralSize = centralDirectory.reduce((total, chunk) => total + chunk.length, 0);
+  assertZip32(centralOffset, "ZIP central directory offset");
+  assertZip32(centralSize, "ZIP central directory");
+  if (centralDirectory.length / 2 > 0xffff) fail(".brlp bundle contains too many files for ZIP32.");
+
+  const end = zipHeader(22);
+  const entryCount = centralDirectory.length / 2;
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(entryCount, 8);
+  end.writeUInt16LE(entryCount, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(centralOffset, 16);
+  end.writeUInt16LE(0, 20);
+
+  writeFileSync(bundlePath, Buffer.concat([...chunks, ...centralDirectory, end]));
 }
 
 function slugifyName(value) {
@@ -420,13 +529,7 @@ function pack(packageDir, keyPath) {
   mkdirSync(outDir, { recursive: true });
   const bundlePath = join(outDir, `${manifest.id}-${manifest.version}.brlp`);
   if (existsSync(bundlePath)) rmSync(bundlePath, { force: true });
-  const excludes = ["dist-bundles/*", "node_modules/*", ".git/*"];
-  if (excludedKeyFile) excludes.push(excludedKeyFile);
-  const zip = spawnSync("zip", ["-qr", bundlePath, ".", "-x", ...excludes], {
-    cwd: packageDir,
-    stdio: "inherit"
-  });
-  if (zip.status !== 0) fail("Failed to create .brlp bundle. Ensure the zip command is available.");
+  writeZipArchive(packageDir, bundlePath, new Set(excludedKeyFile ? [excludedKeyFile] : []));
   console.log(`Packed ${bundlePath}`);
 }
 
