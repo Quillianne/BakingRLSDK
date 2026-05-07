@@ -46,6 +46,10 @@ BakingRL v2 packages are described by `bakingrl.plugin.json`.
 that schema to render typed instance settings in the page and layout editors,
 instead of forcing users to edit raw JSON.
 
+Settings schemas should be JSON Schema objects with `properties`. Use
+`title`, `description`, `default`, `required`, numeric/string bounds, and
+primitive option lists to make the generated editor form readable.
+
 Supported field shapes in the current host UI:
 
 - `type: "string"`, including `format: "color"`;
@@ -67,10 +71,25 @@ Supported field shapes in the current host UI:
     "showBoost": {
       "type": "boolean",
       "default": true
+    },
+    "density": {
+      "type": "string",
+      "default": "comfortable",
+      "oneOf": [
+        { "const": "compact", "title": "Compact" },
+        { "const": "comfortable", "title": "Comfortable" }
+      ]
     }
   }
 }
 ```
+
+## Page Templates
+
+`exports.pages` contains templates for host-owned page layouts. Importing a
+template does not create a plugin-owned route or window. BakingRL assigns fresh
+IDs and timestamps, tracks template provenance, and then lets users edit the
+page like any other page.
 
 ## Layout Templates
 
@@ -78,6 +97,10 @@ Supported field shapes in the current host UI:
 imported into BakingRL's host-owned layout list; it does not create an overlay
 runtime by itself. Users can then route the imported layout to the in-game
 overlay or OBS stream output.
+
+Layout template IDs, layer IDs, item IDs, timestamps, and template provenance
+may be rewritten during import. Keep portable behavior in package/export
+references and item settings rather than relying on template IDs.
 
 ## Distribution Bundle
 
