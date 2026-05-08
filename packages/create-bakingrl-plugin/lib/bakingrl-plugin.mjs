@@ -38,6 +38,21 @@ function isInsideDirectory(parentDir, childPath) {
   return childRelative !== ".." && !childRelative.startsWith(`..${sep}`) && !childRelative.startsWith("/");
 }
 
+function validatePackageId(value) {
+  if (value === "." || value === ".." || value.startsWith(".") || value.endsWith(".")) {
+    fail("manifest.id must not contain empty or dot-only path segments");
+  }
+  if (value.split(".").some((segment) => segment.length === 0)) {
+    fail("manifest.id must not contain empty dot-separated segments");
+  }
+  if (value.startsWith("plugin.")) {
+    fail("manifest.id must not include the reserved 'plugin.' runtime prefix");
+  }
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    fail("manifest.id contains unsupported characters");
+  }
+}
+
 function validatePackage(packageDir) {
   const manifestPath = join(packageDir, "bakingrl.plugin.json");
   if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
@@ -48,6 +63,7 @@ function validatePackage(packageDir) {
       fail(`manifest.${field} must be a non-empty string`);
     }
   }
+  validatePackageId(manifest.id);
   if (!manifest.exports || typeof manifest.exports !== "object") {
     fail("manifest.exports is required");
   }
@@ -547,7 +563,10 @@ function inspect(packageDir) {
 function installLocal(packageDir) {
   const manifest = validatePackage(packageDir);
   const packagesDir = appDataDir();
-  const target = join(packagesDir, manifest.id);
+  const target = resolve(packagesDir, manifest.id);
+  if (target === packagesDir || !isInsideDirectory(packagesDir, target)) {
+    fail(`Refusing to install package outside packages directory: ${target}`);
+  }
   mkdirSync(packagesDir, { recursive: true });
   if (existsSync(target)) rmSync(target, { recursive: true, force: true });
   mkdirSync(dirname(target), { recursive: true });
