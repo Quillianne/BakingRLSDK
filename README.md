@@ -21,7 +21,7 @@ A BakingRL plugin package can expose one or more capabilities:
 
 ```txt
 packages/plugin-sdk/              TypeScript SDK published as @bakingrl/plugin-sdk
-packages/create-bakingrl-plugin/  Scaffolder and package helper CLI
+packages/create-bakingrl-plugin/  Scaffolder and package helper CLI published as @bakingrl/create-plugin
 docs-src/                         Quarkdown source for public documentation
 docs-site/                        Generated site output, ignored locally
 ```
@@ -33,10 +33,40 @@ npm install
 npm run check
 ```
 
+## Published Install
+
+Install the published scaffolder and helper CLI globally:
+
+```sh
+npm install -g @bakingrl/create-plugin
+```
+
+This exposes two commands:
+
+```sh
+create-bakingrl-plugin
+bakingrl-plugin
+```
+
+Create a plugin package:
+
+```sh
+create-bakingrl-plugin my-package
+cd my-package
+npm install
+npm run build
+npm run pack
+```
+
+Published scaffolds use the published SDK package:
+
+```json
+"@bakingrl/plugin-sdk": "^0.2.0"
+```
+
 ## Local Global Install
 
-Until the SDK and scaffolder are published to npm, install this checkout
-globally:
+When developing this SDK repository itself, install this checkout globally:
 
 ```sh
 cd BakingRLSDK
@@ -82,9 +112,7 @@ npm run pack
 npm run install:local
 ```
 
-The generated package uses the local SDK while you are working before npm
-publication. Published scaffolds will use the published package version of
-`@bakingrl/plugin-sdk`.
+The generated package uses the local SDK while you are working in this checkout.
 
 ## Documentation
 

@@ -1,15 +1,28 @@
 {
-  "name": "create-bakingrl-plugin",
+  "name": "@bakingrl/create-plugin",
   "version": "0.2.0",
   "description": "Create BakingRL plugin packages from official templates.",
   "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/Quillianne/BakingRLSDK#readme",
+  "bugs": {
+    "url": "https://github.com/Quillianne/BakingRLSDK/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Quillianne/BakingRLSDK.git",
+    "directory": "packages/create-bakingrl-plugin"
+  },
   "bin": {
-    "create-bakingrl-plugin": "bin/create-bakingrl-plugin.mjs"
+    "create-bakingrl-plugin": "bin/create-bakingrl-plugin.mjs",
+    "bakingrl-plugin": "lib/bakingrl-plugin.mjs"
   },
   "files": [
     "bin",
     "lib",
     "templates"
   ],
-  "license": "MIT"
+  "publishConfig": {
+    "access": "public"
+  }
 }

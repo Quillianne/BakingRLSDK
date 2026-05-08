@@ -25,7 +25,7 @@ A BakingRL plugin package can expose one or more capabilities:
 
 ```txt
 packages/plugin-sdk/              TypeScript SDK published as @bakingrl/plugin-sdk
-packages/create-bakingrl-plugin/  Scaffolder and package helper CLI
+packages/create-bakingrl-plugin/  Scaffolder and package helper CLI published as @bakingrl/create-plugin
 docs-src/                         Quarkdown source documentation
 docs-site/                        Generated documentation output
 ```

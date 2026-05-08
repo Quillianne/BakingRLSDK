@@ -5,9 +5,30 @@
 
 Generated packages include `scripts/bakingrl-plugin.mjs`.
 
+## Published Install
+
+Install the published CLI package:
+
+```sh
+npm install -g @bakingrl/create-plugin
+```
+
+This provides:
+
+```sh
+create-bakingrl-plugin
+bakingrl-plugin
+```
+
+Generated packages use the published SDK package:
+
+```json
+"@bakingrl/plugin-sdk": "^0.2.0"
+```
+
 ## Global Local Install
 
-Before npm publication, install the SDK repository globally:
+When developing the SDK repository itself, install this checkout globally:
 
 ```sh
 cd BakingRLSDK

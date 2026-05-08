@@ -14,7 +14,21 @@ service, and a connector.
 
 ## Create A Package
 
-Recommended local setup before npm publication:
+Recommended setup:
+
+```sh
+npm install -g @bakingrl/create-plugin
+```
+
+Create a package in a plugin repository:
+
+```sh
+create-bakingrl-plugin my-package
+cd my-package
+npm install
+```
+
+When developing the SDK repository itself, install the local checkout globally:
 
 ```sh
 cd BakingRLSDK
@@ -22,7 +36,7 @@ npm install
 npm install -g .
 ```
 
-Create a package in a sibling plugin repository:
+Create a package in a sibling plugin repository from that local checkout:
 
 ```sh
 cd ../BakingRLPlugins
@@ -53,14 +67,6 @@ From this repository without global install:
 
 ```sh
 npm run create -- my-package
-cd my-package
-npm install
-```
-
-From npm, once the scaffolder is published:
-
-```sh
-npm create bakingrl-plugin my-package
 cd my-package
 npm install
 ```

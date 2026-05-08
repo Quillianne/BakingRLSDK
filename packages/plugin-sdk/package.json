@@ -4,6 +4,17 @@
   "description": "Types and helpers for BakingRL plugin packages.",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://github.com/Quillianne/BakingRLSDK#readme",
+  "bugs": {
+    "url": "https://github.com/Quillianne/BakingRLSDK/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Quillianne/BakingRLSDK.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,6 +24,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build"
