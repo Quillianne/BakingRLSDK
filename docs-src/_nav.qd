@@ -1,6 +1,7 @@
 - Guides
   - [Introduction](chapters/introduction.qd)
   - [Getting Started](chapters/getting-started.qd)
+  - [Authoring Workflows](chapters/authoring-workflows.qd)
 - Reference
   - [SDK API](chapters/sdk-api.qd)
   - [Plugin Package Format](chapters/plugin-package-format.qd)

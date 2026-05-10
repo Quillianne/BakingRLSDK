@@ -5,6 +5,7 @@
   "scripts": {
     "build": "vite build",
     "check": "tsc --noEmit",
+    "validate": "node scripts/bakingrl-plugin.mjs validate",
     "add": "node scripts/bakingrl-plugin.mjs add",
     "pack": "node scripts/bakingrl-plugin.mjs pack",
     "keygen": "node scripts/bakingrl-plugin.mjs keygen",

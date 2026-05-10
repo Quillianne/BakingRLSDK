@@ -10,17 +10,18 @@ service, and a connector.
 
 - Node.js 20 or newer.
 - npm 10 or newer.
-- A local BakingRL app checkout if you want to install and test packages.
+- A local BakingRL app checkout if you want to install and test packages in the
+  host application.
 
-## Create A Package
+## Create A Package From npm
 
-Recommended setup:
+Install the published scaffolder:
 
 ```sh
 npm install -g @bakingrl/create-plugin
 ```
 
-Create a package in a plugin repository:
+Create a package:
 
 ```sh
 create-bakingrl-plugin my-package
@@ -28,15 +29,23 @@ cd my-package
 npm install
 ```
 
-When developing the SDK repository itself, install the local checkout globally:
+Generated packages use the published SDK dependency:
+
+```json
+"@bakingrl/plugin-sdk": "^0.2.0"
+```
+
+## Create A Package From A Local SDK Checkout
+
+When developing this SDK repository itself, install the checkout globally:
 
 ```sh
 cd BakingRLSDK
 npm install
-npm install -g .
+npm install -g . --force
 ```
 
-Create a package in a sibling plugin repository from that local checkout:
+Create a package in a sibling plugin repository:
 
 ```sh
 cd ../BakingRLPlugins
@@ -45,8 +54,7 @@ cd my-package
 npm install
 ```
 
-By default, a generator installed from `BakingRLSDK` uses the SDK from this
-checkout through a `file:` dependency.
+Generated packages use the SDK from the checkout through a `file:` dependency.
 
 After editing SDK types or runtime helpers:
 
@@ -63,23 +71,55 @@ cd ../BakingRLSDK
 npm install -g . --force
 ```
 
-From this repository without global install:
+You can also run the generator without global installation:
 
 ```sh
-npm run create -- my-package
-cd my-package
-npm install
+cd BakingRLSDK
+npm run create -- ../BakingRLPlugins/my-package
 ```
 
-## Build And Install Locally
+## Generated Package Layout
+
+The default template includes:
+
+```txt
+bakingrl.plugin.json
+package.json
+vite.config.ts
+src/visuals/scoreboard/index.ts
+src/components/team-badge/index.ts
+src/components/team-badge/props.schema.json
+src/services/match-stats/index.ts
+src/services/match-stats/methods.schema.json
+src/connectors/twitch/index.ts
+scripts/bakingrl-plugin.mjs
+```
+
+The manifest declares the runtime capabilities. `vite.config.ts` controls which
+source entries are built to the `dist/` paths declared in the manifest.
+
+## Build, Validate, Pack, Install
+
+Use this loop for most plugin work:
 
 ```sh
 npm run build
+npm run check
+npm run validate
 npm run pack
 npm run install:local
 ```
 
-`install:local` copies the package into BakingRL's app-data package directory:
+What each command does:
+
+- `build`: bundles every Vite input to `dist/`.
+- `check`: runs TypeScript without emitting files.
+- `validate`: verifies manifest shape and built export entries.
+- `pack`: writes hashes and creates a `.brlp` bundle in `dist-bundles/`.
+- `install:local`: copies the built package into BakingRL's app-data package
+  directory.
+
+Local package install directories:
 
 - Linux: `$XDG_DATA_HOME/com.quillianne.bakingrl/packages` or
   `~/.local/share/com.quillianne.bakingrl/packages`
@@ -97,15 +137,11 @@ Set `BAKINGRL_PACKAGES_DIR` to override the target during development.
 5. Use the layout editor mock events to test event-driven visuals without
    launching Rocket League.
 
-## Development Loop
+## Next Steps
 
-Use this loop for most plugin work:
-
-```sh
-npm run build
-npm run check
-npm run pack
-npm run install:local
-```
-
-Then reload packages in BakingRL.
+- Use [Authoring Workflows](authoring-workflows.qd) for TypeScript examples,
+  separate HTML/CSS files, services, components, and settings.
+- Use [SDK API](sdk-api.qd) for the complete SDK helper and context reference.
+- Use [Package CLI](package-cli.qd) for every generator and helper command.
+- Use [Plugin Package Format](plugin-package-format.qd) for manifest exports,
+  settings schemas, page templates, layout templates, and bundle contents.

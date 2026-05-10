@@ -3,27 +3,46 @@
 .include {docs}
 .doclang {en}
 
-The SDK exports Rocket League telemetry event names and payload types.
+The SDK exports typed Rocket League telemetry event names, payload shapes, and
+mock frames for local tests.
 
 ```ts
-import type {
-  RlTelemetryEventName,
-  RlTelemetryPayloadByEvent
+import {
+  RL_TELEMETRY_EVENT_NAMES,
+  telemetryFrameTemplate,
+  mockGoalScored,
+  type RlTelemetryEventName,
+  type RlTelemetryPayloadByEvent
 } from "@bakingrl/plugin-sdk";
 ```
 
-## Typed Subscription Example
+## Event Frame Shape
+
+Telemetry frames use the same shape as BakingRL event callbacks:
 
 ```ts
-context.bus.subscribe("UpdateState", (event) => {
-  const players = event.Data.Players;
-  const teams = event.Data.Game.Teams;
+type BakingRLEvent<TData = unknown, TEvent extends string = string> = {
+  Event: TEvent;
+  Data: TData;
+};
+```
+
+For known Rocket League events, `BakingRLEventData<TEvent>` maps the event name
+to the payload type in `RlTelemetryPayloadByEvent`.
+
+```ts
+context.bus.subscribe("GoalScored", (event) => {
+  event.Data.Scorer.Name;
+  event.Data.GoalSpeed;
 });
 ```
 
+Unknown event names are typed as `unknown`, which is useful for
+plugin-defined events such as `plugin.com.example.package.state`.
+
 ## Supported Event Names
 
-The SDK currently models:
+`RL_TELEMETRY_EVENT_NAMES` contains:
 
 - `UpdateState`
 - `BallHit`
@@ -46,5 +65,241 @@ The SDK currently models:
 - `RoundStarted`
 - `StatfeedEvent`
 
-Use unknown-safe handling for plugin-defined events such as
-`plugin.com.example.package.state`.
+## Common Payload Types
+
+`RlLocation`
+
+```ts
+{
+  X: number;
+  Y: number;
+  Z: number;
+}
+```
+
+`RlPlayerRef`
+
+```ts
+{
+  Name: string;
+  Shortcut?: number;
+  TeamNum: number;
+}
+```
+
+`RlPlayer` extends `RlPlayerRef` with optional scoreboard, car, boost, speed,
+touch, and demolition fields such as `Score`, `Goals`, `Shots`, `Saves`,
+`Boost`, `Speed`, `bOnGround`, and `bDemolished`.
+
+`RlTeam`
+
+```ts
+{
+  Name: string;
+  TeamNum: number;
+  Score: number;
+  ColorPrimary: string;
+  ColorSecondary: string;
+}
+```
+
+`RlGameState` includes teams, match time, overtime state, replay state, winner
+state, arena, target player, and ball state.
+
+## Event Payload Map
+
+`UpdateState`
+
+Payload type: `RlUpdateStatePayload`.
+
+Important fields:
+
+- `MatchGuid?`
+- `Players`
+- `Game`
+
+`BallHit`
+
+Payload type: `RlBallHitPayload`.
+
+Important fields:
+
+- `MatchGuid?`
+- `Players`
+- `Ball.PreHitSpeed`
+- `Ball.PostHitSpeed`
+- `Ball.Location`
+
+`ClockUpdatedSeconds`
+
+Payload type: `RlClockUpdatedSecondsPayload`.
+
+Important fields:
+
+- `MatchGuid?`
+- `TimeSeconds`
+- `bOvertime`
+
+Simple match events
+
+Payload type: `RlSimpleMatchPayload`.
+
+Events:
+
+- `CountdownBegin`
+- `GoalReplayEnd`
+- `GoalReplayStart`
+- `GoalReplayWillEnd`
+- `MatchCreated`
+- `MatchInitialized`
+- `MatchDestroyed`
+- `MatchPaused`
+- `MatchUnpaused`
+- `PodiumStart`
+- `ReplayCreated`
+- `ReplayWillEnd`
+- `RoundStarted`
+
+Important fields:
+
+- `MatchGuid?`
+
+`CrossbarHit`
+
+Payload type: `RlCrossbarHitPayload`.
+
+Important fields:
+
+- `MatchGuid?`
+- `BallLocation`
+- `BallSpeed`
+- `ImpactForce`
+- `BallLastTouch`
+
+`GoalScored`
+
+Payload type: `RlGoalScoredPayload`.
+
+Important fields:
+
+- `MatchGuid?`
+- `GoalSpeed`
+- `GoalTime`
+- `ImpactLocation`
+- `Scorer`
+- `Assister?`
+- `BallLastTouch`
+
+`MatchEnded`
+
+Payload type: `RlMatchEndedPayload`.
+
+Important fields:
+
+- `MatchGuid?`
+- `WinnerTeamNum`
+
+`StatfeedEvent`
+
+Payload type: `RlStatfeedEventPayload`.
+
+Important fields:
+
+- `MatchGuid?`
+- `EventName`
+- `Type`
+- `MainTarget`
+- `SecondaryTarget?`
+
+## Fixture Constants And Helpers
+
+`RL_TELEMETRY_FRAME_TEMPLATES`
+
+An object containing one complete sample frame for every supported event.
+
+```ts
+const template = RL_TELEMETRY_FRAME_TEMPLATES.GoalScored;
+```
+
+Do not mutate templates directly in tests. Use `telemetryFrameTemplate` or the
+mock helpers to get a cloned frame.
+
+`telemetryFrameTemplate(eventName)`
+
+Returns a deep-cloned sample frame for an event.
+
+```ts
+const frame = telemetryFrameTemplate("UpdateState");
+frame.Data.Game.TimeSeconds = 120;
+```
+
+`telemetryFrameTemplateJson(eventName)`
+
+Returns a pretty-printed JSON string for a sample frame. This is useful when
+building fixture files or inspecting the modeled payload.
+
+```ts
+const json = telemetryFrameTemplateJson("GoalScored");
+```
+
+`mockRocketLeagueEvent(eventName, overrides)`
+
+Creates a cloned sample frame and shallow-merges `overrides` into `Data`.
+
+```ts
+const frame = mockRocketLeagueEvent("ClockUpdatedSeconds", {
+  TimeSeconds: 45,
+  bOvertime: false
+});
+```
+
+Event-specific helpers
+
+The SDK also exports one helper per event:
+
+- `mockUpdateState(overrides)`
+- `mockBallHit(overrides)`
+- `mockClockUpdatedSeconds(overrides)`
+- `mockCountdownBegin(overrides)`
+- `mockCrossbarHit(overrides)`
+- `mockGoalReplayEnd(overrides)`
+- `mockGoalReplayStart(overrides)`
+- `mockGoalReplayWillEnd(overrides)`
+- `mockGoalScored(overrides)`
+- `mockMatchCreated(overrides)`
+- `mockMatchInitialized(overrides)`
+- `mockMatchDestroyed(overrides)`
+- `mockMatchEnded(overrides)`
+- `mockMatchPaused(overrides)`
+- `mockMatchUnpaused(overrides)`
+- `mockPodiumStart(overrides)`
+- `mockReplayCreated(overrides)`
+- `mockReplayWillEnd(overrides)`
+- `mockRoundStarted(overrides)`
+- `mockStatfeedEvent(overrides)`
+
+`mockUpdateState` merges overrides into `Data.Game`. `mockBallHit` merges
+overrides into `Data.Ball`. The other helpers merge overrides into `Data`.
+
+## Typed Subscription Example
+
+```ts
+context.bus.subscribe("UpdateState", (event) => {
+  const players = event.Data.Players;
+  const teams = event.Data.Game.Teams;
+  const target = event.Data.Game.Target;
+});
+```
+
+## Defensive Handling
+
+Telemetry is runtime input. Even when TypeScript knows the expected shape,
+plugin code should handle missing optional fields and unexpected values from
+external sources.
+
+```ts
+context.bus.subscribe("GoalScored", (event) => {
+  const scorer = event.Data.Scorer?.Name ?? "Unknown player";
+  const assister = event.Data.Assister?.Name ?? null;
+});
+```

@@ -16,6 +16,9 @@ of contents of the current page.
   capabilities, and compatibility.
 - [Getting Started](chapters/getting-started.qd): local SDK install, package
   creation, and the development loop.
+- [Authoring Workflows](chapters/authoring-workflows.qd): common plugin
+  authoring patterns with TypeScript, services, components, and separate
+  HTML/CSS files.
 - [SDK API](chapters/sdk-api.qd): TypeScript helpers and runtime contexts.
 - [Plugin Package Format](chapters/plugin-package-format.qd): manifest schema,
   export types, and bundle structure.
