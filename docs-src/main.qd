@@ -10,6 +10,9 @@ This site is generated as a multi-page Quarkdown documentation site. Use the
 left navigation to move between sections and the right navigation for the table
 of contents of the current page.
 
+The current SDK version is `0.3.0`. Generated packages declare runtime API
+`0.3.0`, and current BakingRL hosts support `>=0.3.0 <0.4.0`.
+
 ## Start Here
 
 - [Introduction](chapters/introduction.qd): repository purpose, plugin
@@ -27,3 +30,10 @@ of contents of the current page.
   package boundaries.
 - [Telemetry Types](chapters/telemetry-types.qd): Rocket League event names and
   typed payloads.
+
+## Source Of Truth
+
+The SDK owns plugin authoring contracts, templates, helper CLI behavior, and
+manifest type definitions. The host application owns runtime enforcement,
+package installation, permission checks, page rendering, overlays, and OBS
+gateway behavior.

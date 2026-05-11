@@ -301,6 +301,33 @@ const accent = setting(context.settings, "accent", "#38bdf8");
 context.root.style.setProperty("--accent", accent);
 ```
 
+## Package Configuration Page
+
+A package can declare one private configuration page. This page appears in the
+package detail Configuration tab inside BakingRL. It is not a public page
+template and its private visuals are not shown in the normal visual picker.
+
+```json
+{
+  "exports": {
+    "configuration": {
+      "path": "pages/configuration.json",
+      "title": "Package Settings",
+      "visuals": {
+        "settingsPanel": {
+          "entry": "dist/configuration/settings-panel.js",
+          "defaultSize": [1200, 740]
+        }
+      }
+    }
+  }
+}
+```
+
+The host renders every package configuration page on a fixed `1200x740`
+canvas. Design configuration visuals for that size and keep persistent package
+state behind host APIs or package settings instead of local filesystem paths.
+
 ## Local Test Fixtures
 
 The SDK mock helpers let simple tests mount exports without the BakingRL host:

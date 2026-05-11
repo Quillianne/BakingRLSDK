@@ -16,6 +16,8 @@ A BakingRL plugin package can expose one or more capabilities:
 - Services running in a sandboxed backend runtime.
 - Connectors with explicit host-mediated HTTP and WebSocket permissions.
 - Page templates that users can import into BakingRL.
+- Overlay layout templates that users can import into BakingRL.
+- Private fixed-size configuration pages opened from package details.
 
 ## Repository Layout
 
@@ -61,7 +63,7 @@ npm run pack
 Published scaffolds use the published SDK package:
 
 ```json
-"@bakingrl/plugin-sdk": "^0.2.0"
+"@bakingrl/plugin-sdk": "^0.3.0"
 ```
 
 ## Local Global Install
@@ -141,5 +143,6 @@ npm run docs:dev
 
 ## Compatibility
 
-This SDK targets BakingRL plugin package schema `bakingrl.plugin/2` and SDK
-version `0.2.x`.
+This SDK targets BakingRL plugin package schema `bakingrl.plugin/2`, SDK
+version `0.3.x`, and runtime API `0.3.0`. Current BakingRL hosts support
+runtime API range `>=0.3.0 <0.4.0`.

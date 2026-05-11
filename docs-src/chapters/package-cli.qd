@@ -123,10 +123,13 @@ Validation checks:
 - `id`, `name`, and `version` are non-empty strings;
 - `id` uses supported characters, has no empty dot segments, and does not use
   the reserved `plugin.` runtime prefix;
+- `compatibility.runtimeApi` exists and targets helper runtime API `0.3.x`;
 - `exports` exists and contains at least one capability;
 - visual, component, service, and connector entries point to existing built
   `.js` files inside the package;
 - page and layout template paths stay inside the package and exist;
+- configuration page paths stay inside the package and private configuration
+  visual entries point to built `.js` files;
 - deprecated `exports.overlays` is not used.
 
 Run `npm run build` before `validate` because validation checks built entry

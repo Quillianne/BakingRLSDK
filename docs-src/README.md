@@ -4,6 +4,10 @@
 chapter lives in `chapters/` and is linked as a Quarkdown subdocument, so the
 generated site contains one HTML page per chapter.
 
+This source is English-only for now. Future French documentation should use a
+separate source directory or build target with the same stable slugs, instead
+of mixing languages inside the same page.
+
 ```txt
 main.qd
 _nav.qd
@@ -11,6 +15,7 @@ _setup.qd
 chapters/
   introduction.qd
   getting-started.qd
+  authoring-workflows.qd
   sdk-api.qd
   plugin-package-format.qd
   package-cli.qd

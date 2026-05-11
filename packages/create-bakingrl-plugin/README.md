@@ -34,3 +34,8 @@ plugin packages during development.
 New packages declare `compatibility.runtimeApi` with the current BakingRL
 runtime API (`0.3.0`). The helper refuses to validate packages that omit it or
 target an incompatible runtime API range.
+
+The current template can be extended with visuals, components, services, and
+connectors through `npm run add -- <type> <name>`. Package configuration pages
+are declared manually with `exports.configuration` when a plugin needs a
+private fixed-size settings surface in the host.

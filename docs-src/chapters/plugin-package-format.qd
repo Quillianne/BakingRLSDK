@@ -45,6 +45,50 @@ BakingRL v2 packages are described by `bakingrl.plugin.json`.
 - `exports.layouts`: importable overlay layout templates.
 - `exports.configuration`: private fixed-size plugin configuration page.
 
+## Top-Level Fields
+
+`schema`
+
+Must be `bakingrl.plugin/2`.
+
+`id`
+
+Stable package identity. Use a reverse-DNS style value such as
+`com.example.scoreboard`. Do not use the reserved `plugin.` runtime prefix.
+
+`name`
+
+Human-readable package name.
+
+`version`
+
+Package version. Use semantic versions so the host and future marketplace can
+compare updates predictably.
+
+`compatibility`
+
+Runtime compatibility declaration. `runtimeApi` is required; `sdk` is optional
+but recommended for diagnostics.
+
+`exports`
+
+Capabilities provided by the package. A package must export at least one
+capability.
+
+`imports`
+
+Optional package references consumed by this package. Current fields are
+`components` and `services`.
+
+`permissions`
+
+Optional host-enforced permissions for bus events, registry keys, network
+hosts, and storage paths.
+
+`settings`
+
+Optional package-level settings schema path.
+
 ## Runtime Compatibility
 
 `compatibility.runtimeApi` is required for packages targeting current BakingRL
@@ -141,6 +185,46 @@ file dimensions.
   }
 }
 ```
+
+Configuration visuals are private to that page. Do not reference them from
+normal pages, overlays, or public layout templates.
+
+## Imports And Permissions
+
+Imports declare package capabilities this package expects to consume:
+
+```json
+{
+  "imports": {
+    "components": ["com.example.ui/TeamBadge"],
+    "services": ["com.example.stats/matchStats"]
+  }
+}
+```
+
+Permissions declare host-mediated capabilities:
+
+```json
+{
+  "permissions": {
+    "bus": {
+      "read": ["UpdateState", "GoalScored"],
+      "publish": ["plugin.com.example.scoreboard.*"]
+    },
+    "registry": {
+      "read": ["plugin.com.example.scoreboard.*"],
+      "write": ["plugin.com.example.scoreboard.*"]
+    },
+    "network": {
+      "http": ["api.example.com"],
+      "websocket": ["stream.example.com"]
+    },
+    "storage": ["plugin://self/*"]
+  }
+}
+```
+
+The SDK can type these fields, but the host is the enforcement boundary.
 
 ## Distribution Bundle
 

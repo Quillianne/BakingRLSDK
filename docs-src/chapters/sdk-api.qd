@@ -16,6 +16,8 @@ and authoring ergonomics, but it is not a security boundary.
 import {
   SDK_VERSION,
   RUNTIME_API_VERSION,
+  SUPPORTED_RUNTIME_API_RANGE,
+  currentCompatibility,
   defineVisual,
   defineComponent,
   defineService,
@@ -31,8 +33,10 @@ The root module also re-exports all telemetry names, payload types, fixtures,
 and mock event helpers from the telemetry module.
 
 `SDK_VERSION` is the SDK helper version. `RUNTIME_API_VERSION` is the host
-contract version that generated manifests should declare. In this release both
-are `0.3.0`.
+contract version that generated manifests should declare.
+`SUPPORTED_RUNTIME_API_RANGE` is the host compatibility range represented by
+this SDK release. In this release, `SDK_VERSION` and `RUNTIME_API_VERSION` are
+`0.3.0`, and `SUPPORTED_RUNTIME_API_RANGE` is `>=0.3.0 <0.4.0`.
 
 ## JSON Utility Types
 
@@ -192,6 +196,29 @@ host-mediated RPC boundary.
 
 Connectors do not define service RPC methods in the current SDK contract. Use a
 service export when other plugin code needs callable methods.
+
+## Manifest Types
+
+The SDK exports TypeScript types for `bakingrl.plugin.json`:
+
+- `PluginManifest`
+- `ManifestCompatibility`
+- `ManifestVisualExport`
+- `ManifestComponentExport`
+- `ManifestServiceExport`
+- `ManifestConnectorExport`
+- `ManifestTemplateExport`
+- `ManifestConfigurationExport`
+
+Use `currentCompatibility()` when generating manifests from tools or tests:
+
+```ts
+import { currentCompatibility } from "@bakingrl/plugin-sdk";
+
+const compatibility = currentCompatibility();
+```
+
+It returns the current `runtimeApi` and `sdk` versions for this SDK release.
 
 ## Visual Context
 

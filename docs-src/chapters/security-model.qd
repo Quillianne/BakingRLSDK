@@ -11,6 +11,7 @@ The Rust host owns:
 
 - package installation and bundle extraction;
 - manifest parsing and effective permissions;
+- runtime API compatibility decisions;
 - telemetry ingestion;
 - registry reads and writes;
 - service RPC;
@@ -31,6 +32,8 @@ Examples:
 - A visual calls a service with `context.services.call("package/service", method, input)`.
 - A service writes only under permitted `plugin.<package-id>.*` registry keys.
 - A connector can call only declared HTTP or WebSocket hosts.
+- A private configuration visual can render only inside its package
+  configuration page.
 
 ## Bundle Safety
 
@@ -43,6 +46,13 @@ The host rejects bundles with:
 - oversized total uncompressed size;
 - hash mismatches;
 - invalid Ed25519 signatures.
+
+## Trust State
+
+Hash and signature files are package metadata. They help the host and future
+marketplace reason about integrity, but they do not make plugin code trusted.
+Remote trust policy belongs to the BakingRL host and marketplace design, not to
+plugin packages.
 
 ## Practical Guidance
 
