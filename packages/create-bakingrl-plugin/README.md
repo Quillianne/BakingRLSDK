@@ -30,3 +30,7 @@ npm run pack
 Generated packages include `scripts/bakingrl-plugin.mjs`, but the global
 `bakingrl-plugin` command can also validate, pack, inspect, sign, and install
 plugin packages during development.
+
+New packages declare `compatibility.runtimeApi` with the current BakingRL
+runtime API (`0.3.0`). The helper refuses to validate packages that omit it or
+target an incompatible runtime API range.

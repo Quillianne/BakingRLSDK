@@ -4,6 +4,10 @@
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
   "author": "Your Name",
+  "compatibility": {
+    "runtimeApi": "__RUNTIME_API_VERSION__",
+    "sdk": "__PLUGIN_SDK_VERSION__"
+  },
   "exports": {
     "visuals": {
       "scoreboard": {

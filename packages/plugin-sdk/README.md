@@ -20,4 +20,5 @@ export default defineVisual({
 });
 ```
 
-This SDK targets BakingRL plugin package schema `bakingrl.plugin/2`.
+This SDK targets BakingRL plugin package schema `bakingrl.plugin/2` and runtime
+API `0.3.0`.

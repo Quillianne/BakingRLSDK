@@ -13,6 +13,10 @@ BakingRL v2 packages are described by `bakingrl.plugin.json`.
   "id": "com.example.my-package",
   "name": "My Package",
   "version": "1.0.0",
+  "compatibility": {
+    "runtimeApi": "0.3.0",
+    "sdk": "0.3.0"
+  },
   "exports": {
     "visuals": {
       "scoreboard": {
@@ -39,6 +43,16 @@ BakingRL v2 packages are described by `bakingrl.plugin.json`.
 - `exports.connectors`: backend modules with explicit network permissions.
 - `exports.pages`: importable page templates.
 - `exports.layouts`: importable overlay layout templates.
+- `exports.configuration`: private fixed-size plugin configuration page.
+
+## Runtime Compatibility
+
+`compatibility.runtimeApi` is required for packages targeting current BakingRL
+hosts. The SDK scaffolder initializes it with the current runtime API version.
+
+Current host support is `>=0.3.0 <0.4.0`. Packages outside that range can still
+be installed for inspection, but the host disables them and refuses activation
+until they are rebuilt for a compatible runtime API.
 
 ## Visual Instance Settings
 
@@ -101,6 +115,32 @@ overlay or OBS stream output.
 Layout template IDs, layer IDs, item IDs, timestamps, and template provenance
 may be rewritten during import. Keep portable behavior in package/export
 references and item settings rather than relying on template IDs.
+
+## Configuration Page
+
+`exports.configuration` declares one private page rendered only from the package
+detail configuration tab. It is not listed as a user-importable page template,
+and its visuals are not available in the normal visual picker.
+
+The host forces the configuration canvas to `1200x740`, regardless of the page
+file dimensions.
+
+```json
+{
+  "exports": {
+    "configuration": {
+      "path": "pages/configuration.json",
+      "title": "Package Settings",
+      "visuals": {
+        "settingsPanel": {
+          "entry": "dist/configuration/settings-panel.js",
+          "defaultSize": [1200, 740]
+        }
+      }
+    }
+  }
+}
+```
 
 ## Distribution Bundle
 

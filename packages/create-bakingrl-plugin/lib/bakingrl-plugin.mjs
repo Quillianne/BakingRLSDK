@@ -7,6 +7,8 @@ import { spawnSync } from "node:child_process";
 import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
+const runtimeApiVersion = "0.3.0";
+const sdkVersion = "0.3.0";
 
 function fail(message) {
   console.error(message);
@@ -53,6 +55,46 @@ function validatePackageId(value) {
   }
 }
 
+function parseSemver(value) {
+  if (typeof value !== "string") return null;
+  const parts = value.split(".").map((part) => Number(part));
+  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
+    return null;
+  }
+  return parts;
+}
+
+function validateRuntimeCompatibility(manifest) {
+  const runtimeApi = manifest.compatibility?.runtimeApi;
+  const parsed = parseSemver(runtimeApi);
+  if (!parsed) {
+    fail("manifest.compatibility.runtimeApi must declare a semver version like 0.3.0");
+  }
+  if (parsed[0] !== 0 || parsed[1] !== 3) {
+    fail(`manifest.compatibility.runtimeApi ${runtimeApi} is not compatible with helper runtime API ${runtimeApiVersion}`);
+  }
+  const sdk = manifest.compatibility?.sdk;
+  if (sdk !== undefined && !parseSemver(sdk)) {
+    fail("manifest.compatibility.sdk must be a semver version like 0.3.0");
+  }
+}
+
+function validateBuiltEntry(packageDir, groupName, name, exportDef) {
+  if (typeof exportDef.entry !== "string" || !exportDef.entry.endsWith(".js")) {
+    fail(`${groupName}.${name}.entry must point to a built .js file`);
+  }
+  const entryPath = resolve(packageDir, exportDef.entry);
+  if (!isInsideDirectory(packageDir, entryPath)) {
+    fail(`${groupName}.${name}.entry must stay inside the package`);
+  }
+  if (!existsSync(entryPath)) {
+    fail(`Built entry does not exist: ${exportDef.entry}`);
+  }
+  if (statSync(entryPath).size === 0) {
+    fail(`Built entry is empty: ${exportDef.entry}`);
+  }
+}
+
 function validatePackage(packageDir) {
   const manifestPath = join(packageDir, "bakingrl.plugin.json");
   if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
@@ -64,6 +106,7 @@ function validatePackage(packageDir) {
     }
   }
   validatePackageId(manifest.id);
+  validateRuntimeCompatibility(manifest);
   if (!manifest.exports || typeof manifest.exports !== "object") {
     fail("manifest.exports is required");
   }
@@ -80,19 +123,7 @@ function validatePackage(packageDir) {
   for (const [groupName, group] of entryGroups) {
     for (const [name, exportDef] of Object.entries(group)) {
       exportCount += 1;
-      if (typeof exportDef.entry !== "string" || !exportDef.entry.endsWith(".js")) {
-        fail(`${groupName}.${name}.entry must point to a built .js file`);
-      }
-      const entryPath = resolve(packageDir, exportDef.entry);
-      if (!isInsideDirectory(packageDir, entryPath)) {
-        fail(`${groupName}.${name}.entry must stay inside the package`);
-      }
-      if (!existsSync(entryPath)) {
-        fail(`Built entry does not exist: ${exportDef.entry}`);
-      }
-      if (statSync(entryPath).size === 0) {
-        fail(`Built entry is empty: ${exportDef.entry}`);
-      }
+      validateBuiltEntry(packageDir, groupName, name, exportDef);
     }
   }
   for (const [groupName, label, group] of [
@@ -111,6 +142,24 @@ function validatePackage(packageDir) {
       if (!existsSync(templatePath)) {
         fail(`${label} template does not exist: ${exportDef.path}`);
       }
+    }
+  }
+  if (manifest.exports.configuration) {
+    exportCount += 1;
+    const configuration = manifest.exports.configuration;
+    if (typeof configuration.path !== "string" || configuration.path.trim() === "") {
+      fail("configuration.path must point to a configuration page JSON file");
+    }
+    const pagePath = resolve(packageDir, configuration.path);
+    if (!isInsideDirectory(packageDir, pagePath)) {
+      fail("configuration.path must stay inside the package");
+    }
+    if (!existsSync(pagePath)) {
+      fail(`Configuration page does not exist: ${configuration.path}`);
+    }
+    const visuals = configuration.visuals ?? {};
+    for (const [name, exportDef] of Object.entries(visuals)) {
+      validateBuiltEntry(packageDir, "configuration.visuals", name, exportDef);
     }
   }
   if (exportCount === 0) fail("Package must export at least one capability");
@@ -554,6 +603,7 @@ function inspect(packageDir) {
   console.log(JSON.stringify({
     id: manifest.id,
     version: manifest.version,
+    compatibility: manifest.compatibility,
     exports: manifest.exports,
     imports: manifest.imports ?? {},
     permissions: manifest.permissions ?? {}

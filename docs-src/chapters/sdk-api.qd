@@ -15,6 +15,7 @@ and authoring ergonomics, but it is not a security boundary.
 ```ts
 import {
   SDK_VERSION,
+  RUNTIME_API_VERSION,
   defineVisual,
   defineComponent,
   defineService,
@@ -29,8 +30,9 @@ import {
 The root module also re-exports all telemetry names, payload types, fixtures,
 and mock event helpers from the telemetry module.
 
-`SDK_VERSION` is the SDK runtime helper version. In this release it is
-`0.2.0`.
+`SDK_VERSION` is the SDK helper version. `RUNTIME_API_VERSION` is the host
+contract version that generated manifests should declare. In this release both
+are `0.3.0`.
 
 ## JSON Utility Types
 
@@ -169,8 +171,9 @@ export default defineConnector({
 `ComponentExport`
 
 - `mount(context, props)`: required. Called when a visual mounts the component.
-- `update(props)`: optional. Called when the host updates component props.
-- `unmount()`: optional. Called before the component instance is destroyed.
+
+Components are owned by the visual that loaded them. Return a cleanup function
+from `mount` if the component needs to detach listeners or timers.
 
 `ServiceExport`
 

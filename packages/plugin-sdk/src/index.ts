@@ -1,6 +1,8 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "0.2.0";
+export const SDK_VERSION = "0.3.0";
+export const RUNTIME_API_VERSION = "0.3.0";
+export const SUPPORTED_RUNTIME_API_RANGE = ">=0.3.0 <0.4.0";
 
 export * from "./telemetry.js";
 
@@ -137,8 +139,6 @@ export type ComponentExport = {
     context: ComponentContext,
     props: Record<string, unknown>
   ): void | CleanupFn | Promise<void | CleanupFn>;
-  update?(props: Record<string, unknown>): void | Promise<void>;
-  unmount?(): void | Promise<void>;
 };
 
 export type ServiceExport = {
@@ -150,6 +150,85 @@ export type ServiceExport = {
 export type ConnectorExport = {
   mount?(context: ConnectorContext): void | Promise<void>;
   unmount?(): void | Promise<void>;
+};
+
+export type ManifestCompatibility = {
+  runtimeApi: string;
+  sdk?: string;
+};
+
+export type ManifestVisualExport = {
+  entry: string;
+  defaultSize?: [number, number];
+  settings?: string;
+};
+
+export type ManifestComponentExport = {
+  entry: string;
+  props?: string;
+};
+
+export type ManifestServiceExport = {
+  entry: string;
+  methods?: string[];
+  schema?: string;
+};
+
+export type ManifestConnectorExport = {
+  entry: string;
+};
+
+export type ManifestTemplateExport = {
+  path: string;
+  title?: string;
+  description?: string;
+};
+
+export type ManifestConfigurationExport = {
+  path: string;
+  title?: string;
+  description?: string;
+  visuals?: Record<string, ManifestVisualExport>;
+};
+
+export type PluginManifest = {
+  schema: "bakingrl.plugin/2";
+  id: string;
+  name: string;
+  version: string;
+  author?: string;
+  compatibility: ManifestCompatibility;
+  exports: {
+    visuals?: Record<string, ManifestVisualExport>;
+    components?: Record<string, ManifestComponentExport>;
+    services?: Record<string, ManifestServiceExport>;
+    connectors?: Record<string, ManifestConnectorExport>;
+    assets?: Record<string, { path: string }>;
+    schemas?: Record<string, { path: string }>;
+    pages?: Record<string, ManifestTemplateExport>;
+    layouts?: Record<string, ManifestTemplateExport>;
+    configuration?: ManifestConfigurationExport;
+  };
+  imports?: {
+    components?: string[];
+    services?: string[];
+  };
+  permissions?: {
+    bus?: {
+      read?: string[];
+      publish?: string[];
+    };
+    registry?: {
+      read?: string[];
+      write?: string[];
+    };
+    network?: {
+      http?: string[];
+      websocket?: string[];
+    };
+    storage?: string[];
+  };
+  settings?: string;
 };
 
 export type PluginDefinition = {
@@ -180,6 +259,13 @@ export function defineService<T extends ServiceExport>(service: T): T {
 
 export function defineConnector<T extends ConnectorExport>(connector: T): T {
   return connector;
+}
+
+export function currentCompatibility(): ManifestCompatibility {
+  return {
+    runtimeApi: RUNTIME_API_VERSION,
+    sdk: SDK_VERSION
+  };
 }
 
 export function setting<TValue>(
