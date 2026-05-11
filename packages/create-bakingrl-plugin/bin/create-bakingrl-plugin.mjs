@@ -8,8 +8,8 @@ import { stdin as input, stdout as output } from "node:process";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatesRoot = join(packageRoot, "templates");
 const helperPath = join(packageRoot, "lib", "bakingrl-plugin.mjs");
-const runtimeApiVersion = "0.3.0";
-const sdkVersion = "0.3.0";
+const runtimeApiVersion = "0.4.0";
+const sdkVersion = "0.4.0";
 
 const templates = [
   {
@@ -68,7 +68,7 @@ function sdkDependency(packageDir) {
   const localSdkPath = resolve(packageRoot, "..", "plugin-sdk");
   if (existsSync(localSdkPath)) return packageRelativeFileDependency(packageDir, localSdkPath);
 
-  return "^0.3.0";
+  return "^0.4.0";
 }
 
 function copyTemplate(source, target, replacements) {

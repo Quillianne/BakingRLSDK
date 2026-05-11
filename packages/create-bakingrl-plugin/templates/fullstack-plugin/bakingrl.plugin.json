@@ -8,6 +8,7 @@
     "runtimeApi": "__RUNTIME_API_VERSION__",
     "sdk": "__PLUGIN_SDK_VERSION__"
   },
+  "settings": "src/settings.schema.json",
   "exports": {
     "visuals": {
       "scoreboard": {

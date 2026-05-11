@@ -25,7 +25,8 @@ import {
   setting,
   createCleanup,
   createMockVisualContext,
-  createMockServiceContext
+  createMockServiceContext,
+  createMockConnectorContext
 } from "@bakingrl/plugin-sdk";
 ```
 
@@ -36,7 +37,7 @@ and mock event helpers from the telemetry module.
 contract version that generated manifests should declare.
 `SUPPORTED_RUNTIME_API_RANGE` is the host compatibility range represented by
 this SDK release. In this release, `SDK_VERSION` and `RUNTIME_API_VERSION` are
-`0.3.0`, and `SUPPORTED_RUNTIME_API_RANGE` is `>=0.3.0 <0.4.0`.
+`0.4.0`, and `SUPPORTED_RUNTIME_API_RANGE` is `>=0.4.0 <0.5.0`.
 
 ## JSON Utility Types
 
@@ -303,6 +304,8 @@ export default defineService({
 
 `ConnectorContext` extends `ServiceContext` with host-mediated network APIs:
 
+- `secrets`: connector-only secret reader for package settings marked as
+  `x-bakingrl-secret`;
 - `fetch(input, init)`: performs a permitted HTTP request.
 - `websocket.connect(url)`: opens a permitted WebSocket connection.
 
@@ -399,10 +402,25 @@ const logoUrl = context.assets.url("assets/logo.png");
 `SettingsReader.get(key)` and `SettingsReader.all()`
 
 Backend settings access. `get` returns `undefined` when the key is absent.
+Secrets are intentionally omitted from `settings`.
 
 ```ts
 const pollMs = context.settings.get<number>("pollMs") ?? 5000;
 const settings = context.settings.all();
+```
+
+`SecretReader.get(key)` and `SecretReader.configured(key)`
+
+Connector-only secret access. `get` returns `undefined` when the secret is not
+configured. `configured` checks host metadata without reading the keychain.
+`get` reads the keychain on first access, then uses the host's in-memory cache
+until the app exits. Visuals, components, and services do not receive this API.
+
+```ts
+const apiKey = context.secrets.get("apiKey");
+if (!apiKey) {
+  context.diagnostics.warn("API key is not configured.");
+}
 ```
 
 `Diagnostics.log(message, data)`, `Diagnostics.warn(message, data)`, and
@@ -479,6 +497,28 @@ import service from "../src/services/match-stats";
 
 const context = createMockServiceContext();
 await service.mount?.(context);
+```
+
+`createMockConnectorContext(partial)`
+
+Builds a backend connector context for tests. It extends the service mock with
+empty secrets, a no-op fetch helper, and a no-op websocket connector.
+
+```ts
+import { createMockConnectorContext } from "@bakingrl/plugin-sdk";
+import connector from "../src/connectors/api-sync";
+
+const context = createMockConnectorContext({
+  secrets: {
+    get(key) {
+      return key === "apiKey" ? "test-key" : undefined;
+    },
+    configured(key) {
+      return key === "apiKey";
+    }
+  }
+});
+await connector.mount?.(context);
 ```
 
 ## Reference Strings

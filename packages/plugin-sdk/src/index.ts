@@ -1,8 +1,8 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "0.3.0";
-export const RUNTIME_API_VERSION = "0.3.0";
-export const SUPPORTED_RUNTIME_API_RANGE = ">=0.3.0 <0.4.0";
+export const SDK_VERSION = "0.4.0";
+export const RUNTIME_API_VERSION = "0.4.0";
+export const SUPPORTED_RUNTIME_API_RANGE = ">=0.4.0 <0.5.0";
 
 export * from "./telemetry.js";
 
@@ -70,6 +70,7 @@ export type ServiceContext = {
 };
 
 export type ConnectorContext = ServiceContext & {
+  secrets: SecretReader;
   fetch(input: string, init?: unknown): Promise<unknown>;
   websocket: {
     connect(url: string): Promise<unknown>;
@@ -120,6 +121,11 @@ export type AssetResolver = {
 export type SettingsReader = {
   get<TValue = unknown>(key: string): TValue | undefined;
   all(): Record<string, unknown>;
+};
+
+export type SecretReader = {
+  get(key: string): string | undefined;
+  configured(key: string): boolean;
 };
 
 export type Diagnostics = {
@@ -392,6 +398,31 @@ export function createMockServiceContext(
       }
     },
     diagnostics: consoleDiagnostics(),
+    ...partial
+  };
+}
+
+export function createMockConnectorContext(
+  partial: Partial<ConnectorContext> = {}
+): ConnectorContext {
+  return {
+    ...createMockServiceContext(partial),
+    secrets: {
+      get() {
+        return undefined;
+      },
+      configured() {
+        return false;
+      }
+    },
+    async fetch() {
+      return null;
+    },
+    websocket: {
+      async connect() {
+        return null;
+      }
+    },
     ...partial
   };
 }

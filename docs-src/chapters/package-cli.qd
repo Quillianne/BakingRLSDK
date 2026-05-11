@@ -123,7 +123,11 @@ Validation checks:
 - `id`, `name`, and `version` are non-empty strings;
 - `id` uses supported characters, has no empty dot segments, and does not use
   the reserved `plugin.` runtime prefix;
-- `compatibility.runtimeApi` exists and targets helper runtime API `0.3.x`;
+- `compatibility.runtimeApi` exists and targets helper runtime API `0.4.x`;
+- package-level `settings`, when declared, points to a JSON Schema object with
+  supported primitive fields;
+- secret settings use `type: "string"`, `x-bakingrl-secret: true`, and no
+  default value;
 - `exports` exists and contains at least one capability;
 - visual, component, service, and connector entries point to existing built
   `.js` files inside the package;

@@ -7,8 +7,8 @@ import { spawnSync } from "node:child_process";
 import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
-const runtimeApiVersion = "0.3.0";
-const sdkVersion = "0.3.0";
+const runtimeApiVersion = "0.4.0";
+const sdkVersion = "0.4.0";
 
 function fail(message) {
   console.error(message);
@@ -68,14 +68,14 @@ function validateRuntimeCompatibility(manifest) {
   const runtimeApi = manifest.compatibility?.runtimeApi;
   const parsed = parseSemver(runtimeApi);
   if (!parsed) {
-    fail("manifest.compatibility.runtimeApi must declare a semver version like 0.3.0");
+    fail("manifest.compatibility.runtimeApi must declare a semver version like 0.4.0");
   }
-  if (parsed[0] !== 0 || parsed[1] !== 3) {
+  if (parsed[0] !== 0 || parsed[1] !== 4) {
     fail(`manifest.compatibility.runtimeApi ${runtimeApi} is not compatible with helper runtime API ${runtimeApiVersion}`);
   }
   const sdk = manifest.compatibility?.sdk;
   if (sdk !== undefined && !parseSemver(sdk)) {
-    fail("manifest.compatibility.sdk must be a semver version like 0.3.0");
+    fail("manifest.compatibility.sdk must be a semver version like 0.4.0");
   }
 }
 
@@ -95,6 +95,71 @@ function validateBuiltEntry(packageDir, groupName, name, exportDef) {
   }
 }
 
+function validatePackageSettingsSchema(packageDir, settingsPath) {
+  if (settingsPath === undefined) return;
+  if (typeof settingsPath !== "string" || settingsPath.trim() === "") {
+    fail("manifest.settings must point to a package settings JSON Schema file");
+  }
+  const schemaPath = resolve(packageDir, settingsPath);
+  if (!isInsideDirectory(packageDir, schemaPath)) {
+    fail("manifest.settings must stay inside the package");
+  }
+  if (!existsSync(schemaPath)) {
+    fail(`Package settings schema does not exist: ${settingsPath}`);
+  }
+  const schema = readJson(schemaPath);
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+    fail("manifest.settings must point to a JSON Schema object");
+  }
+  if (schema.type !== undefined && schema.type !== "object") {
+    fail("package settings schema type must be \"object\"");
+  }
+  if (!schema.properties || typeof schema.properties !== "object" || Array.isArray(schema.properties)) {
+    fail("package settings schema must declare properties");
+  }
+  for (const [key, property] of Object.entries(schema.properties)) {
+    validateSettingsProperty(`settings.${key}`, property);
+  }
+}
+
+function validateSettingsProperty(label, property) {
+  if (!property || typeof property !== "object" || Array.isArray(property)) {
+    fail(`${label} must be a JSON Schema property object`);
+  }
+  const type = Array.isArray(property.type) ? property.type.filter((entry) => entry !== "null")[0] : property.type;
+  const inferredType = type ?? inferSettingsPropertyType(property);
+  const supported = new Set(["string", "number", "integer", "boolean", "array"]);
+  if (!supported.has(inferredType)) {
+    fail(`${label}.type must be string, number, integer, boolean, or an enum-backed array`);
+  }
+  if (property["x-bakingrl-secret"] === true) {
+    if (inferredType !== "string") {
+      fail(`${label} is a secret and must use type "string"`);
+    }
+    if (Object.prototype.hasOwnProperty.call(property, "default")) {
+      fail(`${label} is a secret and must not declare a default value`);
+    }
+  }
+  if (inferredType === "array") {
+    const itemType = property.items ? inferSettingsPropertyType(property.items) : null;
+    const itemOptions = property.items?.enum ?? property.items?.oneOf ?? property.items?.anyOf;
+    if (!itemType || !itemOptions) {
+      fail(`${label} arrays must declare primitive options on items`);
+    }
+  }
+}
+
+function inferSettingsPropertyType(property) {
+  if (Array.isArray(property.enum) && property.enum.length) {
+    const firstType = typeof property.enum[0];
+    if (property.enum.every((entry) => typeof entry === firstType) && ["string", "number", "boolean"].includes(firstType)) {
+      return firstType === "number" ? "number" : firstType;
+    }
+  }
+  if (property.items) return "array";
+  return property.type ?? "string";
+}
+
 function validatePackage(packageDir) {
   const manifestPath = join(packageDir, "bakingrl.plugin.json");
   if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
@@ -107,6 +172,7 @@ function validatePackage(packageDir) {
   }
   validatePackageId(manifest.id);
   validateRuntimeCompatibility(manifest);
+  validatePackageSettingsSchema(packageDir, manifest.settings);
   if (!manifest.exports || typeof manifest.exports !== "object") {
     fail("manifest.exports is required");
   }

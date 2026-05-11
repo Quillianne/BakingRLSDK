@@ -276,7 +276,7 @@ how package files are served.
 
 ## Settings
 
-Visual exports can declare a settings schema in the manifest:
+Visual exports can declare instance settings in the manifest:
 
 ```json
 {
@@ -301,11 +301,26 @@ const accent = setting(context.settings, "accent", "#38bdf8");
 context.root.style.setProperty("--accent", accent);
 ```
 
+Packages can also declare package-level settings:
+
+```json
+{
+  "settings": "src/settings.schema.json"
+}
+```
+
+Package-level secret fields use `x-bakingrl-secret: true`, are stored in the OS
+keychain, and are readable only from connectors through `context.secrets`.
+Non-secret package settings are available through `context.settings`.
+Use `context.secrets.configured(key)` for UI/status checks; call
+`context.secrets.get(key)` only when the connector actually needs the value.
+The host caches secret values in memory after the first keychain read.
+
 ## Package Configuration Page
 
-A package can declare one private configuration page. This page appears in the
-package detail Configuration tab inside BakingRL. It is not a public page
-template and its private visuals are not shown in the normal visual picker.
+A package can declare one private configuration page. This page opens from the
+package configuration action inside BakingRL. It is not a public page template
+and its private visuals are not shown in the normal visual picker.
 
 ```json
 {
@@ -327,6 +342,9 @@ template and its private visuals are not shown in the normal visual picker.
 The host renders every package configuration page on a fixed `1200x740`
 canvas. Design configuration visuals for that size and keep persistent package
 state behind host APIs or package settings instead of local filesystem paths.
+If the package declares secrets, BakingRL renders those fields in host-owned UI
+next to the custom page so plugin frontend code never sees submitted secret
+values.
 
 ## Local Test Fixtures
 

@@ -32,11 +32,11 @@ npm install
 Generated packages use the published SDK dependency:
 
 ```json
-"@bakingrl/plugin-sdk": "^0.3.0"
+"@bakingrl/plugin-sdk": "^0.4.0"
 ```
 
 The generated manifest also declares `compatibility.runtimeApi` with the
-current runtime API version, `0.3.0`.
+current runtime API version, `0.4.0`.
 
 ## Create A Package From A Local SDK Checkout
 
@@ -137,8 +137,8 @@ Set `BAKINGRL_PACKAGES_DIR` to override the target during development.
 2. Open the Packages tab.
 3. Enable your package.
 4. Add visual exports to an overlay layout or custom page.
-5. Open the package detail Configuration tab if the package declares
-   `exports.configuration`.
+5. Use the package configuration action if the package declares
+   `settings` or `exports.configuration`.
 6. Use the layout editor mock events to test event-driven visuals without
    launching Rocket League.
 

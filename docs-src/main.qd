@@ -10,8 +10,8 @@ This site is generated as a multi-page Quarkdown documentation site. Use the
 left navigation to move between sections and the right navigation for the table
 of contents of the current page.
 
-The current SDK version is `0.3.0`. Generated packages declare runtime API
-`0.3.0`, and current BakingRL hosts support `>=0.3.0 <0.4.0`.
+The current SDK version is `0.4.0`. Generated packages declare runtime API
+`0.4.0`, and current BakingRL hosts support `>=0.4.0 <0.5.0`.
 
 ## Start Here
 

@@ -14,8 +14,8 @@ BakingRL v2 packages are described by `bakingrl.plugin.json`.
   "name": "My Package",
   "version": "1.0.0",
   "compatibility": {
-    "runtimeApi": "0.3.0",
-    "sdk": "0.3.0"
+    "runtimeApi": "0.4.0",
+    "sdk": "0.4.0"
   },
   "exports": {
     "visuals": {
@@ -87,14 +87,16 @@ hosts, and storage paths.
 
 `settings`
 
-Optional package-level settings schema path.
+Optional package-level settings JSON Schema path. BakingRL uses it to render a
+host-owned package configuration form when no custom `exports.configuration`
+page is declared.
 
 ## Runtime Compatibility
 
 `compatibility.runtimeApi` is required for packages targeting current BakingRL
 hosts. The SDK scaffolder initializes it with the current runtime API version.
 
-Current host support is `>=0.3.0 <0.4.0`. Packages outside that range can still
+Current host support is `>=0.4.0 <0.5.0`. Packages outside that range can still
 be installed for inspection, but the host disables them and refuses activation
 until they are rebuilt for a compatible runtime API.
 
@@ -142,6 +144,45 @@ Supported field shapes in the current host UI:
 }
 ```
 
+## Package Settings And Secrets
+
+Package-level `settings` schemas use the same supported JSON Schema field
+shapes as visual instance settings. Non-sensitive values are stored in
+BakingRL's package settings file, merged with schema defaults, and exposed to
+visuals, services, and connectors through `context.settings`.
+
+Secret fields must be string properties with `x-bakingrl-secret: true`.
+Secrets must not declare defaults. BakingRL stores them in the OS keychain,
+never includes them in `context.settings`, and only exposes them to connectors
+through `context.secrets`.
+`context.secrets.configured(key)` uses a non-secret configured flag managed by
+the host. `context.secrets.get(key)` reads the keychain on first access and then
+uses an in-memory host cache until the app exits.
+
+```json
+{
+  "settings": "src/settings.schema.json"
+}
+```
+
+```json
+{
+  "type": "object",
+  "title": "Connector Settings",
+  "properties": {
+    "apiBaseUrl": {
+      "type": "string",
+      "default": "https://api.example.com"
+    },
+    "apiKey": {
+      "type": "string",
+      "format": "password",
+      "x-bakingrl-secret": true
+    }
+  }
+}
+```
+
 ## Page Templates
 
 `exports.pages` contains templates for host-owned page layouts. Importing a
@@ -162,9 +203,9 @@ references and item settings rather than relying on template IDs.
 
 ## Configuration Page
 
-`exports.configuration` declares one private page rendered only from the package
-detail configuration tab. It is not listed as a user-importable page template,
-and its visuals are not available in the normal visual picker.
+`exports.configuration` declares one private page opened from the package
+configuration action. It is not listed as a user-importable page template, and
+its visuals are not available in the normal visual picker.
 
 The host forces the configuration canvas to `1200x740`, regardless of the page
 file dimensions.
@@ -187,7 +228,10 @@ file dimensions.
 ```
 
 Configuration visuals are private to that page. Do not reference them from
-normal pages, overlays, or public layout templates.
+normal pages, overlays, or public layout templates. If the package also
+declares secret settings, BakingRL renders those secret fields in host-owned UI
+next to the custom page so plugin frontend code cannot read the submitted
+values.
 
 ## Imports And Permissions
 
