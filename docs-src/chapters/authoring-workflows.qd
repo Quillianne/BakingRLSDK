@@ -295,11 +295,42 @@ Visual exports can declare instance settings in the manifest:
 Read settings at runtime with the `setting` helper:
 
 ```ts
-import { setting } from "@bakingrl/plugin-sdk";
+import { defineVisual, setting, type VisualContext } from "@bakingrl/plugin-sdk";
 
-const accent = setting(context.settings, "accent", "#38bdf8");
-context.root.style.setProperty("--accent", accent);
+type Instance = {
+  accent: string;
+};
+
+const instances = new Map<HTMLElement, Instance>();
+
+function render(context: VisualContext, instance: Instance) {
+  context.root.style.setProperty("--accent", instance.accent);
+}
+
+export default defineVisual({
+  mount(context: VisualContext) {
+    const instance = {
+      accent: setting(context.settings, "accent", "#38bdf8")
+    };
+    instances.set(context.root, instance);
+    render(context, instance);
+    return () => instances.delete(context.root);
+  },
+  update(context) {
+    const instance = instances.get(context.root);
+    if (!instance) return;
+    instance.accent = setting(context.settings, "accent", "#38bdf8");
+    render(context, instance);
+  }
+});
 ```
+
+When an instance setting affects the rendered output, implement
+`update(context)` and rerender from the new `context.settings`. The editor
+pushes settings and metadata changes to mounted visuals. A host may remount
+visuals that do not expose `update`, but that is a fallback behavior, not the
+recommended refresh path. Relying on remounting can reset local state,
+subscriptions, timers, and animations.
 
 Packages can also declare package-level settings:
 
@@ -315,6 +346,23 @@ Non-secret package settings are available through `context.settings`.
 Use `context.secrets.configured(key)` for UI/status checks; call
 `context.secrets.get(key)` only when the connector actually needs the value.
 The host caches secret values in memory after the first keychain read.
+
+## Visual Sizing
+
+The page or layout editor owns the outer rectangle of each visual. Your visual
+should render inside `context.root` and treat that element as the sizing
+boundary. `defaultSize` in the manifest is only the initial placement size; the
+user can resize the instance afterward.
+
+For flexible widgets, use normal CSS with `width: 100%`, `height: 100%`, and
+responsive layout inside the root. For fixed-design broadcast graphics, wrap the
+design in an inner element with a known design size and scale that inner element
+to fit `context.root` with a `ResizeObserver`. Return a cleanup function that
+disconnects the observer.
+
+Do not position visual content relative to the viewport, mutate DOM outside
+`context.root`, or depend on editor reloads to apply sizing or settings
+changes.
 
 ## Package Configuration Page
 

@@ -173,6 +173,20 @@ export default defineConnector({
 `mount` can return `void`, `CleanupFn`, `Promise<void>`, or
 `Promise<CleanupFn>`.
 
+Implement `update(context)` for any visual whose rendered output depends on
+`context.settings`, `context.item`, package settings, or other host-provided
+metadata. BakingRL calls `update` when the editor changes instance settings or
+layout metadata. If a visual does not expose `update`, the host may remount it
+as a compatibility fallback, but plugin authors should not rely on remounting
+as the normal refresh path because it can reset local state, timers,
+subscriptions, and in-progress animations.
+
+Use `mount` for one-time setup: initial DOM creation, event subscriptions,
+timers, `ResizeObserver`s, and cleanup registration. Use `update` for applying
+new settings and metadata to the already-mounted instance. Keep the latest
+telemetry or service state in instance-local variables so `update` can rerender
+immediately without waiting for the next telemetry event.
+
 `ComponentExport`
 
 - `mount(context, props)`: required. Called when a visual mounts the component.
@@ -251,16 +265,58 @@ Example:
 ```ts
 import { defineVisual, setting, type VisualContext } from "@bakingrl/plugin-sdk";
 
+type Instance = {
+  accent: string;
+};
+
+const instances = new Map<HTMLElement, Instance>();
+
+function render(context: VisualContext, instance: Instance) {
+  context.root.style.opacity = String(context.item.opacity);
+  context.root.style.setProperty("--accent", instance.accent);
+}
+
 export default defineVisual({
   mount(context: VisualContext) {
-    const accent = setting(context.settings, "accent", "#38bdf8");
-    context.root.style.setProperty("--accent", accent);
+    const instance = {
+      accent: setting(context.settings, "accent", "#38bdf8")
+    };
+    instances.set(context.root, instance);
+    render(context, instance);
+    return () => instances.delete(context.root);
   },
   update(context) {
-    context.root.style.opacity = String(context.item.opacity);
+    const instance = instances.get(context.root);
+    if (!instance) return;
+    instance.accent = setting(context.settings, "accent", "#38bdf8");
+    render(context, instance);
   }
 });
 ```
+
+## Visual Sizing
+
+The host owns the visual instance rectangle. `context.root` already has the
+position and size declared by the page or layout editor. Render inside
+`context.root`; do not write layout code that assumes a fixed viewport, mutates
+the parent editor frame, or positions outside the root.
+
+Use the manifest `defaultSize` as the first placement size and design your
+visual for that box. For fixed-design broadcast widgets, use a root-local scale
+strategy based on `ResizeObserver`: keep an inner design surface at a known
+width and height, then scale it to fit `context.root`. Recalculate that scale
+when the root size changes and clean up the observer from `mount`.
+
+Sizing best practices:
+
+- Use `width: 100%` and `height: 100%` on the visual root content.
+- Keep overflow intentional; prefer `overflow: hidden` for framed widgets.
+- Use `context.item.width` and `context.item.height` only as metadata; the DOM
+  size source of truth is `context.root`.
+- Do not wait for remount to respond to size-sensitive settings. Store the
+  current settings and rerender from `update(context)`.
+- Return cleanup functions for `ResizeObserver`, intervals, animation timers,
+  and bus subscriptions.
 
 ## Component Context
 

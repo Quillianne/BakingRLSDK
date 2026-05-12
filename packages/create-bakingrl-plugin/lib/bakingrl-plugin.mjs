@@ -693,13 +693,20 @@ function addCapability(packageDir, capability, exportName) {
       join(packageDir, sourcePath),
       `import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
 
+function render(context: VisualContext) {
+  context.root.innerHTML = \`
+    <div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:rgba(10,14,18,.82);color:white;border:1px solid rgba(255,255,255,.18);font:700 20px Inter,Arial,sans-serif;opacity:\${context.item.opacity};">
+      ${exportName}
+    </div>
+  \`;
+}
+
 export default defineVisual({
   async mount(context: VisualContext) {
-    context.root.innerHTML = \`
-      <div style="display:flex;align-items:center;justify-content:center;height:100%;background:rgba(10,14,18,.82);color:white;border:1px solid rgba(255,255,255,.18);font:700 20px Inter,Arial,sans-serif;">
-        ${exportName}
-      </div>
-    \`;
+    render(context);
+  },
+  update(context: VisualContext) {
+    render(context);
   }
 });
 `
