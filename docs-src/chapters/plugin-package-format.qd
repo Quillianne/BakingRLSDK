@@ -297,6 +297,39 @@ npm run keygen -- signing-key.json
 npm run pack -- --sign signing-key.json
 ```
 
+## Marketplace Listing
+
+Packages that want to appear in BakingRL Marketplace should include:
+
+```txt
+marketplace/listing.json
+```
+
+The listing is package-owned display metadata:
+
+```json
+{
+  "schema": "bakingrl.plugin-listing/1",
+  "packageId": "com.example.scoreboard",
+  "displayName": "Scoreboard",
+  "shortDescription": "Compact live scoreboard overlay.",
+  "longDescription": "Markdown description shown in the marketplace detail view.",
+  "tags": ["overlay", "telemetry"],
+  "repo": "https://github.com/example/scoreboard",
+  "iconUrl": "https://raw.githubusercontent.com/example/scoreboard/main/marketplace/icon.png",
+  "bannerUrl": "https://raw.githubusercontent.com/example/scoreboard/main/marketplace/banner.png",
+  "screenshots": [],
+  "links": {
+    "docs": "https://github.com/example/scoreboard#readme",
+    "support": "https://github.com/example/scoreboard/issues"
+  }
+}
+```
+
+Listing text and images are not execution trust. Marketplace trust is granted
+only by the signed marketplace index for approved package versions, using the
+reviewed bundle SHA-256, signature public key, and effective permissions.
+
 ## Versioning
 
 Use semantic versions in package manifests. BakingRL treats package IDs as

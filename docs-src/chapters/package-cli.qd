@@ -180,6 +180,18 @@ bakingrl-plugin inspect ./my-package
 Use `inspect` before packaging when you want to verify which runtime surface the
 host will see.
 
+`validate-listing [package-dir]`
+
+Validates `marketplace/listing.json`, the package-owned catalogue metadata used
+by BakingRL Marketplace. The listing must point to the package's GitHub repo.
+If images are declared, they must be HTTPS GitHub URLs under that repo or its
+release assets.
+
+```sh
+npm run validate:listing
+bakingrl-plugin validate-listing ./my-package
+```
+
 `pack [package-dir] [--sign <key-file>]`
 
 Validates the package, writes `manifest.hashes.json`, optionally writes
@@ -193,6 +205,33 @@ npm run pack -- --sign signing-key.json
 The archive is a ZIP32 bundle. The helper excludes `node_modules`, `.git`, and
 `dist-bundles`. If the signing key file is inside the package directory, it is
 excluded from the hash list and archive.
+
+`release-metadata [package-dir] --bundle-url <url> --listing-url <url>`
+
+Generates display-neutral release metadata for a signed `.brlp`: package ID,
+version, bundle URL, bundle SHA-256, signature public key, runtime API, repo,
+and listing URL. Use after `pack --sign`.
+
+```sh
+bakingrl-plugin release-metadata ./my-package \
+  --bundle-url https://github.com/acme/my-package/releases/download/v1.0.0/com.acme.my-package-1.0.0.brlp \
+  --listing-url https://raw.githubusercontent.com/acme/my-package/v1.0.0/marketplace/listing.json \
+  --output release.marketplace.json
+```
+
+`marketplace-entry [package-dir] --developer <id> --bundle-url <url> --listing-url <url>`
+
+Generates a marketplace package entry with one approved version. The entry
+contains the reviewed effective permissions and is intended for a PR to the
+marketplace repository, where it is reviewed before becoming trusted by users.
+
+```sh
+bakingrl-plugin marketplace-entry ./my-package \
+  --developer acme \
+  --bundle-url https://github.com/acme/my-package/releases/download/v1.0.0/com.acme.my-package-1.0.0.brlp \
+  --listing-url https://raw.githubusercontent.com/acme/my-package/v1.0.0/marketplace/listing.json \
+  --output packages/com.acme.my-package.json
+```
 
 `install-local [package-dir]`
 

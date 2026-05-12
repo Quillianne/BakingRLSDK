@@ -1,0 +1,16 @@
+{
+  "schema": "bakingrl.plugin-listing/1",
+  "packageId": "__PLUGIN_ID__",
+  "displayName": "__PLUGIN_NAME__",
+  "shortDescription": "A short description of what this BakingRL package adds.",
+  "longDescription": "Describe what the package does, who it is for, and what users should expect before installing it.",
+  "tags": ["overlay", "telemetry"],
+  "repo": "https://github.com/example/__PLUGIN_SLUG__",
+  "iconUrl": null,
+  "bannerUrl": null,
+  "screenshots": [],
+  "links": {
+    "docs": "https://github.com/example/__PLUGIN_SLUG__#readme",
+    "support": "https://github.com/example/__PLUGIN_SLUG__/issues"
+  }
+}

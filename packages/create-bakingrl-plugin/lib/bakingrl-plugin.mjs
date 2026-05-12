@@ -23,6 +23,10 @@ function readJson(path) {
   }
 }
 
+function writeJson(path, value) {
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
 function appDataDir() {
   if (process.env.BAKINGRL_PACKAGES_DIR) return resolve(process.env.BAKINGRL_PACKAGES_DIR);
   switch (platform()) {
@@ -53,6 +57,20 @@ function validatePackageId(value) {
   if (!/^[A-Za-z0-9._-]+$/.test(value)) {
     fail("manifest.id contains unsupported characters");
   }
+}
+
+function readPackageManifest(packageDir) {
+  const manifestPath = join(packageDir, "bakingrl.plugin.json");
+  if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
+  const manifest = readJson(manifestPath);
+  if (manifest.schema !== "bakingrl.plugin/2") fail("manifest.schema must be bakingrl.plugin/2");
+  for (const field of ["id", "name", "version"]) {
+    if (typeof manifest[field] !== "string" || manifest[field].trim() === "") {
+      fail(`manifest.${field} must be a non-empty string`);
+    }
+  }
+  validatePackageId(manifest.id);
+  return manifest;
 }
 
 function parseSemver(value) {
@@ -161,16 +179,7 @@ function inferSettingsPropertyType(property) {
 }
 
 function validatePackage(packageDir) {
-  const manifestPath = join(packageDir, "bakingrl.plugin.json");
-  if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
-  const manifest = readJson(manifestPath);
-  if (manifest.schema !== "bakingrl.plugin/2") fail("manifest.schema must be bakingrl.plugin/2");
-  for (const field of ["id", "name", "version"]) {
-    if (typeof manifest[field] !== "string" || manifest[field].trim() === "") {
-      fail(`manifest.${field} must be a non-empty string`);
-    }
-  }
-  validatePackageId(manifest.id);
+  const manifest = readPackageManifest(packageDir);
   validateRuntimeCompatibility(manifest);
   validatePackageSettingsSchema(packageDir, manifest.settings);
   if (!manifest.exports || typeof manifest.exports !== "object") {
@@ -231,6 +240,239 @@ function validatePackage(packageDir) {
   if (exportCount === 0) fail("Package must export at least one capability");
   console.log(`Package validation passed: ${manifest.id}`);
   return manifest;
+}
+
+function parseOptions(args) {
+  const options = { positional: [] };
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg.startsWith("--")) {
+      options.positional.push(arg);
+      continue;
+    }
+    const raw = arg.slice(2);
+    const equalsIndex = raw.indexOf("=");
+    const rawKey = equalsIndex === -1 ? raw : raw.slice(0, equalsIndex);
+    const inlineValue = equalsIndex === -1 ? undefined : raw.slice(equalsIndex + 1);
+    const key = rawKey.replaceAll("-", "_");
+    if (inlineValue !== undefined) {
+      options[key] = inlineValue;
+    } else if (args[index + 1] && !args[index + 1].startsWith("--")) {
+      options[key] = args[index + 1];
+      index += 1;
+    } else {
+      options[key] = true;
+    }
+  }
+  return options;
+}
+
+function requireOption(options, key, label) {
+  const value = options[key];
+  if (typeof value !== "string" || value.trim() === "") fail(`Missing ${label}.`);
+  return value.trim();
+}
+
+function optionalUrl(value, label, repoParts = null) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") fail(`${label} must be a URL string.`);
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    fail(`${label} must be a valid URL.`);
+  }
+  if (parsed.protocol !== "https:") fail(`${label} must use HTTPS.`);
+  if (repoParts && !isGitHubAssetUrlForRepo(parsed, repoParts)) {
+    fail(`${label} must point to the declared GitHub repository or one of its release assets.`);
+  }
+  return value;
+}
+
+function githubRepoParts(repoUrl) {
+  let parsed;
+  try {
+    parsed = new URL(repoUrl);
+  } catch {
+    fail("marketplace/listing.json repo must be a valid HTTPS GitHub URL.");
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") {
+    fail("marketplace/listing.json repo must use https://github.com/<owner>/<repo>.");
+  }
+  const [owner, repo, ...rest] = parsed.pathname.split("/").filter(Boolean);
+  if (!owner || !repo || rest.length > 0) {
+    fail("marketplace/listing.json repo must use https://github.com/<owner>/<repo>.");
+  }
+  return { owner, repo: repo.replace(/\.git$/, "") };
+}
+
+function isGitHubAssetUrlForRepo(parsed, repoParts) {
+  const path = parsed.pathname.split("/").filter(Boolean);
+  if (parsed.hostname === "github.com") {
+    const [owner, repo, segment, action] = path;
+    return owner === repoParts.owner
+      && repo?.replace(/\.git$/, "") === repoParts.repo
+      && ((segment === "releases" && action === "download") || segment === "raw");
+  }
+  if (parsed.hostname === "raw.githubusercontent.com") {
+    const [owner, repo] = path;
+    return owner === repoParts.owner && repo === repoParts.repo;
+  }
+  return false;
+}
+
+function validateString(value, label, { max = 1000 } = {}) {
+  if (typeof value !== "string" || value.trim() === "") fail(`${label} must be a non-empty string.`);
+  if (value.length > max) fail(`${label} is too long.`);
+  return value;
+}
+
+function validateListing(packageDir, { print = true } = {}) {
+  const manifest = readPackageManifest(packageDir);
+  const listingPath = join(packageDir, "marketplace", "listing.json");
+  if (!existsSync(listingPath)) fail(`Missing marketplace/listing.json in ${packageDir}`);
+  const listing = readJson(listingPath);
+  if (listing.schema !== "bakingrl.plugin-listing/1") {
+    fail("marketplace/listing.json schema must be bakingrl.plugin-listing/1");
+  }
+  if (listing.packageId !== manifest.id) {
+    fail(`marketplace/listing.json packageId must match manifest.id (${manifest.id}).`);
+  }
+  validateString(listing.displayName ?? manifest.name, "marketplace/listing.json displayName", { max: 120 });
+  validateString(listing.shortDescription, "marketplace/listing.json shortDescription", { max: 180 });
+  validateString(listing.longDescription, "marketplace/listing.json longDescription", { max: 8000 });
+  if (!Array.isArray(listing.tags) || listing.tags.some((tag) => typeof tag !== "string" || tag.trim() === "")) {
+    fail("marketplace/listing.json tags must be an array of non-empty strings.");
+  }
+  const repoParts = githubRepoParts(validateString(listing.repo, "marketplace/listing.json repo", { max: 240 }));
+  optionalUrl(listing.iconUrl, "marketplace/listing.json iconUrl", repoParts);
+  optionalUrl(listing.bannerUrl, "marketplace/listing.json bannerUrl", repoParts);
+  if (!Array.isArray(listing.screenshots)) fail("marketplace/listing.json screenshots must be an array.");
+  for (const [index, screenshot] of listing.screenshots.entries()) {
+    if (!screenshot || typeof screenshot !== "object" || Array.isArray(screenshot)) {
+      fail(`marketplace/listing.json screenshots[${index}] must be an object.`);
+    }
+    optionalUrl(screenshot.url, `marketplace/listing.json screenshots[${index}].url`, repoParts);
+    if (screenshot.alt !== undefined) validateString(screenshot.alt, `marketplace/listing.json screenshots[${index}].alt`, { max: 180 });
+    if (screenshot.caption !== undefined) validateString(screenshot.caption, `marketplace/listing.json screenshots[${index}].caption`, { max: 240 });
+  }
+  const links = listing.links ?? {};
+  if (!links || typeof links !== "object" || Array.isArray(links)) fail("marketplace/listing.json links must be an object.");
+  for (const [key, value] of Object.entries(links)) {
+    optionalUrl(value, `marketplace/listing.json links.${key}`);
+  }
+  if (print) console.log(`Marketplace listing validation passed: ${manifest.id}`);
+  return { manifest, listing, repoParts };
+}
+
+function effectivePermissions(manifest) {
+  const packageScope = `plugin.${manifest.id}.*`;
+  const storageScope = "plugin://self/*";
+  const permissions = manifest.permissions ?? {};
+  const bus = permissions.bus ?? {};
+  const registry = permissions.registry ?? {};
+  const network = permissions.network ?? {};
+  const storageRequested = Array.isArray(permissions.storage) && permissions.storage.includes(storageScope);
+  return {
+    bus: {
+      read: Array.isArray(bus.read) ? bus.read : [],
+      publish: Array.isArray(bus.publish) ? bus.publish.filter((pattern) => pattern === packageScope) : []
+    },
+    registry: {
+      read: Array.isArray(registry.read) ? registry.read : [],
+      write: Array.isArray(registry.write) ? registry.write.filter((pattern) => pattern === packageScope) : []
+    },
+    network: {
+      http: Array.isArray(network.http) ? network.http : [],
+      websocket: Array.isArray(network.websocket) ? network.websocket : []
+    },
+    storage: {
+      read: storageRequested ? [storageScope] : [],
+      write: storageRequested ? [storageScope] : []
+    }
+  };
+}
+
+function findBundlePath(packageDir, manifest) {
+  const bundlePath = join(packageDir, "dist-bundles", `${manifest.id}-${manifest.version}.brlp`);
+  if (!existsSync(bundlePath)) fail(`Missing packed bundle: ${bundlePath}`);
+  return bundlePath;
+}
+
+function readSignaturePublicKey(packageDir) {
+  const signaturePath = join(packageDir, "signature.ed25519");
+  if (!existsSync(signaturePath)) fail("Missing signature.ed25519. Run pack --sign before generating marketplace metadata.");
+  const signature = readJson(signaturePath);
+  if (signature.algorithm !== "ed25519" || typeof signature.publicKey !== "string" || signature.publicKey.trim() === "") {
+    fail("signature.ed25519 must contain an Ed25519 publicKey.");
+  }
+  return signature.publicKey;
+}
+
+function writeOrPrintJson(value, outputPath) {
+  if (outputPath) {
+    mkdirSync(dirname(outputPath), { recursive: true });
+    writeJson(outputPath, value);
+  } else {
+    console.log(JSON.stringify(value, null, 2));
+  }
+}
+
+function releaseMetadata(packageDir, args) {
+  const options = parseOptions(args);
+  const manifest = validatePackage(packageDir);
+  const { listing } = validateListing(packageDir, { print: false });
+  const bundlePath = options.bundle ? resolve(process.cwd(), options.bundle) : findBundlePath(packageDir, manifest);
+  if (!existsSync(bundlePath)) fail(`Bundle does not exist: ${bundlePath}`);
+  const bundleUrl = requireOption(options, "bundle_url", "--bundle-url");
+  const listingUrl = requireOption(options, "listing_url", "--listing-url");
+  const metadata = {
+    schema: "bakingrl.plugin-release/1",
+    packageId: manifest.id,
+    version: manifest.version,
+    repo: listing.repo,
+    listingUrl,
+    bundleUrl,
+    bundleSha256: sha256File(bundlePath),
+    signaturePublicKey: readSignaturePublicKey(packageDir),
+    runtimeApi: manifest.compatibility?.runtimeApi ?? null,
+    generatedAt: new Date().toISOString()
+  };
+  writeOrPrintJson(metadata, options.output ? resolve(process.cwd(), options.output) : null);
+}
+
+function marketplaceEntry(packageDir, args) {
+  const options = parseOptions(args);
+  const developerId = requireOption(options, "developer", "--developer");
+  const manifest = validatePackage(packageDir);
+  const { listing } = validateListing(packageDir, { print: false });
+  const bundlePath = options.bundle ? resolve(process.cwd(), options.bundle) : findBundlePath(packageDir, manifest);
+  if (!existsSync(bundlePath)) fail(`Bundle does not exist: ${bundlePath}`);
+  const bundleUrl = requireOption(options, "bundle_url", "--bundle-url");
+  const listingUrl = requireOption(options, "listing_url", "--listing-url");
+  const reviewedAt = typeof options.reviewed_at === "string" ? options.reviewed_at : new Date().toISOString();
+  const entry = {
+    schema: "bakingrl.marketplace-package/1",
+    id: manifest.id,
+    developerId,
+    repo: listing.repo,
+    listingUrl,
+    approvedVersions: [
+      {
+        version: manifest.version,
+        bundleUrl,
+        bundleSha256: sha256File(bundlePath),
+        signaturePublicKey: readSignaturePublicKey(packageDir),
+        runtimeApi: manifest.compatibility?.runtimeApi ?? null,
+        review: {
+          status: "approved",
+          reviewedAt,
+          permissions: effectivePermissions(manifest)
+        }
+      }
+    ]
+  };
+  writeOrPrintJson(entry, options.output ? resolve(process.cwd(), options.output) : null);
 }
 
 function pathForZip(path) {
@@ -716,6 +958,9 @@ function main() {
   const maybeDir = args[0];
   const packageDir = resolve(process.cwd(), maybeDir && !maybeDir.startsWith("-") ? maybeDir : ".");
   if (command === "validate") return validatePackage(packageDir);
+  if (command === "validate-listing") return validateListing(packageDir);
+  if (command === "release-metadata") return releaseMetadata(packageDir, args);
+  if (command === "marketplace-entry") return marketplaceEntry(packageDir, args);
   if (command === "pack") {
     const keyIndex = args.indexOf("--sign");
     const keyPath = keyIndex === -1 ? null : args[keyIndex + 1];
@@ -729,7 +974,7 @@ function main() {
     console.log(appDataDir());
     return;
   }
-  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs add <visual|component|service|connector> <export-name> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]");
+  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|validate-listing|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs add <visual|component|service|connector> <export-name> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]\n       node scripts/bakingrl-plugin.mjs release-metadata [package-dir] --bundle-url <url> --listing-url <url> [--bundle <path>] [--output <path>]\n       node scripts/bakingrl-plugin.mjs marketplace-entry [package-dir] --developer <id> --bundle-url <url> --listing-url <url> [--bundle <path>] [--reviewed-at <iso>] [--output <path>]");
 }
 
 main();
