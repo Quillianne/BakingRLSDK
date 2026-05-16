@@ -16,6 +16,22 @@ import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
 export default defineVisual({
   mount(context: VisualContext) {
     context.root.textContent = "Hello BakingRL";
+  },
+  editor: {
+    mount(context: VisualContext) {
+      context.root.textContent = "Editor preview";
+    },
+    actions() {
+      return [
+        {
+          id: "trigger",
+          label: "Trigger",
+          run(context: VisualContext) {
+            context.root.textContent = "Triggered";
+          }
+        }
+      ];
+    }
   }
 });
 ```

@@ -43,6 +43,8 @@ export type VisualContext = {
     settings: Record<string, unknown>;
   };
   settings: Record<string, unknown>;
+  mode: "runtime" | "editor";
+  editor?: VisualEditorContext;
   setActive(active: boolean): void;
   bus: VisualBus;
   registry: ReadonlyRegistry;
@@ -50,6 +52,10 @@ export type VisualContext = {
   services: ServiceCaller;
   assets: AssetResolver;
   diagnostics: Diagnostics;
+};
+
+export type VisualEditorContext = {
+  emit<TEvent extends string>(eventName: TEvent, payload?: BakingRLEventData<TEvent>): void;
 };
 
 export type ComponentContext = {
@@ -138,6 +144,17 @@ export type VisualExport = {
   mount(context: VisualContext): void | CleanupFn | Promise<void | CleanupFn>;
   update?(context: VisualContext): void | Promise<void>;
   unmount?(): void | Promise<void>;
+  editor?: {
+    mount?(context: VisualContext): void | CleanupFn | Promise<void | CleanupFn>;
+    actions?(context: VisualContext): VisualEditorAction[] | Promise<VisualEditorAction[]>;
+  };
+};
+
+export type VisualEditorAction = {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  run(context: VisualContext): void | Promise<void>;
 };
 
 export type ComponentExport = {
@@ -324,6 +341,12 @@ export function createMockVisualContext(
       settings: {}
     },
     settings: {},
+    mode: "editor",
+    editor: {
+      emit(eventName, payload) {
+        for (const listener of listeners) listener({ Event: eventName, Data: payload } as BakingRLEvent);
+      }
+    },
     setActive() {},
     bus: {
       subscribe(_eventName, callback) {
