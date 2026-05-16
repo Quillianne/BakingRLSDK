@@ -15,6 +15,9 @@ _setup.qd
 chapters/
   introduction.qd
   getting-started.qd
+  plugin-capabilities.qd
+  plugin-best-practices.qd
+  fullstack-plugin-tutorial.qd
   authoring-workflows.qd
   sdk-api.qd
   plugin-package-format.qd

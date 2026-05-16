@@ -41,9 +41,14 @@ BakingRL v2 packages are described by `bakingrl.plugin.json`.
 - `exports.components`: reusable visual components loaded by visuals.
 - `exports.services`: sandboxed backend modules with callable methods.
 - `exports.connectors`: backend modules with explicit network permissions.
+- `exports.assets`: package-owned static assets.
+- `exports.schemas`: package-owned schema files.
 - `exports.pages`: importable page templates.
 - `exports.layouts`: importable overlay layout templates.
 - `exports.configuration`: private fixed-size plugin configuration page.
+
+Use [Plugin Capabilities](plugin-capabilities.qd) for the behavior and intended
+use of each capability.
 
 ## Top-Level Fields
 

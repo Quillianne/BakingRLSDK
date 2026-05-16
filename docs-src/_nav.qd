@@ -2,6 +2,9 @@
   - [Introduction](chapters/introduction.qd)
   - [Getting Started](chapters/getting-started.qd)
 - Authoring
+  - [Plugin Capabilities](chapters/plugin-capabilities.qd)
+  - [Plugin Best Practices](chapters/plugin-best-practices.qd)
+  - [Fullstack Plugin Tutorial](chapters/fullstack-plugin-tutorial.qd)
   - [Authoring Workflows](chapters/authoring-workflows.qd)
   - [Package CLI](chapters/package-cli.qd)
 - Reference

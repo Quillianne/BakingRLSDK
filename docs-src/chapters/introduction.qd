@@ -22,9 +22,19 @@ A BakingRL plugin package can expose one or more capabilities:
 - Overlay layout templates that users can import into BakingRL.
 - Private fixed-size configuration pages opened from package details.
 
+Packages can also declare settings, assets, schemas, imports, permissions, and
+runtime compatibility. Visuals can expose editor-only states and actions for
+the page and layout editor, while preview mode mounts them through their normal
+runtime behavior.
+
 The SDK describes and types these contracts. The BakingRL host decides whether
 a package can be installed, enabled, loaded, mounted, and allowed to use a
 runtime API.
+
+Use [Plugin Capabilities](plugin-capabilities.qd) for the complete inventory,
+[Plugin Best Practices](plugin-best-practices.qd) for authoring guidance, and
+[Fullstack Plugin Tutorial](fullstack-plugin-tutorial.qd) for an end-to-end
+package walkthrough.
 
 ## Repository Layout
 

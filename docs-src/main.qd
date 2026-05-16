@@ -19,6 +19,14 @@ The current SDK version is `0.4.0`. Generated packages declare runtime API
   capabilities, and compatibility.
 - [Getting Started](chapters/getting-started.qd): local SDK install, package
   creation, and the development loop.
+- [Plugin Capabilities](chapters/plugin-capabilities.qd): everything a package
+  can expose, consume, and request from the host.
+- [Plugin Best Practices](chapters/plugin-best-practices.qd): guidance for
+  choosing capabilities, data flow, editor states, preview, permissions, and
+  packaging.
+- [Fullstack Plugin Tutorial](chapters/fullstack-plugin-tutorial.qd): a
+  guided package that combines a visual, service, editor actions, runtime
+  preview, permissions, and local installation.
 - [Authoring Workflows](chapters/authoring-workflows.qd): common plugin
   authoring patterns with TypeScript, services, components, and separate
   HTML/CSS files.

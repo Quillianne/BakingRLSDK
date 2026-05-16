@@ -1,0 +1,133 @@
+.docname {Plugin Best Practices}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+This guide turns the capability model into practical authoring rules. The goal
+is to keep packages predictable in the host editor, safe at runtime, and easy
+to maintain as the runtime API evolves.
+
+## Choose The Right Capability
+
+Use a visual for DOM rendering, animation, and frontend composition. A visual
+can react to telemetry, settings, service results, and registry snapshots, but
+it should not be the only owner of shared derived state.
+
+Use a service for backend state. Services are the right place to aggregate
+telemetry, publish package events, write registry snapshots, expose RPC methods,
+and keep state that several visuals or pages need.
+
+Use a connector for external systems. Request network hosts narrowly, keep
+secret reads inside connectors, and move reusable package state into a service
+when visuals need to consume the result.
+
+Use a component when several visuals need the same browser UI fragment. Load it
+through the host instead of importing another package directly.
+
+Use page and layout templates to give users a starting point. Keep templates
+portable by relying on package/export references and item settings rather than
+specific template IDs.
+
+Use a private configuration page only for package-specific workflows that need
+more than generated settings fields. Leave secrets in the host-owned settings
+UI.
+
+## Design The Runtime Data Flow
+
+Prefer one clear state owner. For telemetry-derived package state, subscribe in
+a service, normalize the data, write a registry snapshot, and publish a
+`plugin.<package-id>.*` event when visuals should update immediately.
+
+Keep visual code instance-local. Store DOM nodes, latest render state, cleanup
+callbacks, and settings per `context.root`, especially when a visual can appear
+multiple times in the same layout or page.
+
+Use service RPC for explicit requests, such as `snapshot`, `configure`, or
+`reset`. Use bus events for streams and notifications. Use the registry for the
+latest known shared value.
+
+Keep RPC inputs and outputs JSON-compatible. They cross a host-mediated
+boundary and should be easy to validate, serialize, and inspect.
+
+## Make Editor Mode Useful
+
+Editor mode is for visual authoring, not for simulating the full backend.
+
+Provide a readable default state when the visual would otherwise be blank
+without live data. For example, a scoreboard can show placeholder teams and a
+score, while a goal animation can stay idle until the author triggers it.
+
+Expose editor actions for meaningful states:
+
+- different teams or sides;
+- common scores or time states;
+- transient animations such as goal and victory;
+- empty, loading, and error states when they affect layout.
+
+Do not publish editor actions to the real host bus. Use `context.editor.emit`
+so the event reaches only the visual's own `context.bus.subscribe` handlers in
+the editor renderer.
+
+Avoid automatic transient triggers on editor mount. Starting with an idle or
+default state makes the visual inspectable and lets the author trigger goal,
+victory, or replay states intentionally.
+
+Use preview mode when the question is whether the real chain works. Preview
+should exercise the normal visual mount path, service calls, backend-derived
+state, registry reads, and real host event permissions.
+
+## Render Inside The Host Box
+
+The host owns the outer rectangle. Render inside `context.root` and treat that
+element as the sizing boundary.
+
+For fluid widgets, use CSS that fills the root with `width: 100%` and
+`height: 100%`.
+
+For fixed-design broadcast graphics, keep an inner design surface at a known
+size and scale it with a `ResizeObserver`. Disconnect observers and timers from
+the cleanup returned by `mount`.
+
+Implement `update(context)` when settings, opacity, metadata, or other
+host-provided values affect the output. Remounting is a fallback, not the
+normal refresh mechanism.
+
+Do not position content against the viewport, mutate DOM outside
+`context.root`, or depend on editor reloads to apply visual changes.
+
+## Keep Permissions Narrow
+
+Request only the events, registry keys, network hosts, and storage paths the
+package needs.
+
+Use package-scoped names:
+
+- bus publish: `plugin.<package-id>.*`;
+- registry keys: `plugin.<package-id>.*`;
+- storage: `plugin://self/*`.
+
+Treat telemetry, settings, registry values, RPC input, and component props as
+untrusted. Validate or narrow values before using them in rendering,
+state transitions, network calls, or persisted data.
+
+Do not store secrets in package source, JSON settings, registry values, storage
+files, generated bundles, logs, screenshots, or test fixtures. Connector
+secrets should be read only when needed, and `configured(key)` should be used
+for status checks that do not require secret material.
+
+## Package For Maintenance
+
+Keep the manifest, Vite inputs, source files, and generated `dist/` entries in
+sync. Prefer `npm run add -- visual|component|service|connector <name>` for new
+capabilities in generated packages.
+
+Declare `compatibility.runtimeApi` explicitly and rebuild packages when the
+runtime API changes. Do not rely on SDK version alone for compatibility.
+
+Use `npm run validate` before packing or installing locally. Use
+`bakingrl-plugin inspect` when you want to review the manifest surface and
+effective permissions the host will see.
+
+Document package-owned events, registry keys, settings, and permissions in the
+package README. That keeps marketplace review and host debugging tractable.
+

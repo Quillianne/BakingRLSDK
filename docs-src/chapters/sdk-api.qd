@@ -106,6 +106,61 @@ export default defineVisual({
 });
 ```
 
+Visuals can also expose an optional editor contract for BakingRL's layout/page
+editor. This contract is local to the editor canvas and is not published to the
+host bus:
+
+```ts
+export default defineVisual({
+  mount(context: VisualContext) {
+    context.root.textContent = "Waiting";
+
+    return context.bus.subscribe("GoalScored", (event) => {
+      context.root.textContent = `${event.Data.Scorer.Name} scored`;
+    });
+  },
+  editor: {
+    mount(context: VisualContext) {
+      context.editor?.emit("GoalScored", {
+        Scorer: { Name: "Editor Player", TeamNum: 0 },
+        GoalSpeed: 100,
+        GoalTime: 120,
+        ImpactLocation: { X: 0, Y: 0, Z: 0 },
+        BallLastTouch: {
+          Player: { Name: "Editor Player", TeamNum: 0 },
+          Speed: 100
+        }
+      });
+    },
+    actions() {
+      return [
+        {
+          id: "goal",
+          label: "Goal",
+          run(context: VisualContext) {
+            context.editor?.emit("GoalScored", {
+              Scorer: { Name: "Editor Player", TeamNum: 0 },
+              GoalSpeed: 100,
+              GoalTime: 120,
+              ImpactLocation: { X: 0, Y: 0, Z: 0 },
+              BallLastTouch: {
+                Player: { Name: "Editor Player", TeamNum: 0 },
+                Speed: 100
+              }
+            });
+          }
+        }
+      ];
+    }
+  }
+});
+```
+
+`context.mode` is `"editor"` inside the editor canvas and `"runtime"` for
+normal overlay/page rendering. `context.editor` only exists in editor mode.
+Editor events are delivered through the visual's normal `context.bus`
+subscriptions, but they stay local to the editor renderer.
+
 `defineComponent(component)`
 
 Types a reusable visual component. Components are mounted by visuals through
@@ -169,6 +224,10 @@ export default defineConnector({
 - `update(context)`: optional. Called when the host updates instance metadata
   or settings without remounting.
 - `unmount()`: optional. Called before the visual instance is destroyed.
+- `editor.mount(context)`: optional editor-only setup for representative visual
+  states.
+- `editor.actions(context)`: optional editor-only actions shown by the host
+  editor.
 
 `mount` can return `void`, `CleanupFn`, `Promise<void>`, or
 `Promise<CleanupFn>`.
@@ -244,6 +303,9 @@ Visuals receive `VisualContext`:
 - `exportName`: visual export name from `bakingrl.plugin.json`.
 - `item`: layout or page instance metadata.
 - `settings`: merged package and item settings.
+- `mode`: `"runtime"` for normal rendering or `"editor"` inside the host
+  editor canvas.
+- `editor`: editor-only helper API, present only when `mode` is `"editor"`.
 - `setActive(active)`: informs the host that the visual wants event-layer
   activity enabled or disabled.
 - `bus`: telemetry subscription API.

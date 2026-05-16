@@ -139,11 +139,21 @@ Set `BAKINGRL_PACKAGES_DIR` to override the target during development.
 4. Add visual exports to an overlay layout or custom page.
 5. Use the package configuration action if the package declares
    `settings` or `exports.configuration`.
-6. Use the layout editor mock events to test event-driven visuals without
-   launching Rocket League.
+6. Use editor actions to inspect editor-only visual states without launching
+   Rocket League.
+7. Switch the editor to preview mode when you want the package to use its
+   normal runtime path, including services, registry reads, bus events, and
+   service RPC.
 
 ## Next Steps
 
+- Use [Plugin Capabilities](plugin-capabilities.qd) for the complete list of
+  exports, imports, permissions, editor surfaces, and packaging capabilities.
+- Use [Plugin Best Practices](plugin-best-practices.qd) for guidance on visual
+  versus service state, editor actions, preview runtime, permissions, and
+  secrets.
+- Use [Fullstack Plugin Tutorial](fullstack-plugin-tutorial.qd) for a guided
+  package that combines a visual, service, editor actions, and runtime preview.
 - Use [Authoring Workflows](authoring-workflows.qd) for TypeScript examples,
   separate HTML/CSS files, services, components, and settings.
 - Use [SDK API](sdk-api.qd) for the complete SDK helper and context reference.

@@ -1,0 +1,197 @@
+.docname {Plugin Capabilities}
+.docauthor {BakingRL}
+.include {docs}
+.doclang {en}
+
+This page is the capability inventory for BakingRL plugin packages. Use it to
+decide what a package should expose, which host APIs it needs, and which
+permissions must appear in `bakingrl.plugin.json`.
+
+The SDK types the authoring contract. The BakingRL host owns installation,
+runtime compatibility, permission enforcement, page and overlay rendering,
+service startup, network access, registry access, and package configuration.
+
+## Package-Level Contract
+
+Every package is described by `bakingrl.plugin.json`.
+
+Core fields:
+
+- `schema`: must be `bakingrl.plugin/2`.
+- `id`: stable package identity, usually reverse-DNS style.
+- `name`, `version`, and optional `author`: package display and versioning
+  metadata.
+- `compatibility.runtimeApi`: the host runtime API the package targets.
+- `exports`: capabilities provided by the package.
+- `imports`: components and services consumed from other packages.
+- `permissions`: host-mediated access requested by package code.
+- `settings`: package-level settings JSON Schema.
+
+Generated packages also contain Vite inputs, TypeScript source files, package
+helper scripts, and built `dist/` entries that must match the manifest.
+
+## Executable Exports
+
+`exports.visuals`
+
+Browser ESM modules mounted inside overlays, OBS browser-source layouts, custom
+pages, and private configuration pages. A visual receives a host-owned DOM
+`root`, instance metadata, merged settings, and read-oriented frontend APIs.
+Visuals can subscribe to permitted telemetry or plugin events, read permitted
+registry keys, load components, call permitted services, resolve assets, and
+report diagnostics.
+
+Visuals can also expose an editor contract:
+
+- `editor.mount(context)`: optional editor-only setup.
+- `editor.actions(context)`: optional buttons shown by the host editor.
+- `context.editor.emit(eventName, payload)`: injects a local event into that
+  visual instance only.
+
+Editor events are not published to the live host bus. They are meant for
+showing representative visual states and manual triggers while designing a
+page or layout.
+
+`exports.components`
+
+Reusable browser DOM fragments loaded by visuals through
+`context.components.load(ref)`. Components are not global UI widgets; they are
+mounted into a root provided by the consuming visual and should treat props as
+untrusted input.
+
+`exports.services`
+
+Sandboxed backend modules. Services can subscribe to telemetry and plugin
+events, publish permitted plugin events, read and write permitted registry
+keys, read and write permitted text storage, call permitted services, read
+package settings, and expose RPC methods to visuals or other services.
+
+Use services for derived state, aggregation, long-lived backend state, and
+runtime coordination that should not live inside one visual instance.
+
+`exports.connectors`
+
+Backend modules with the service APIs plus host-mediated HTTP, WebSocket, and
+secret access. Connectors are for external systems. They do not expose RPC
+methods directly in the current SDK contract; pair a connector with a service
+when other plugin code needs callable methods.
+
+## Declarative Exports
+
+`exports.pages`
+
+Importable custom page templates. Importing a page template creates a
+host-owned page that users can edit like any other page. The package does not
+own a route or standalone window.
+
+`exports.layouts`
+
+Importable overlay layout templates. Users can route imported layouts to the
+in-game overlay or OBS stream output. Template IDs and item IDs can be rewritten
+during import, so portable behavior must live in package/export references and
+item settings.
+
+`exports.configuration`
+
+One private fixed-size package configuration page opened from package details.
+Its private visuals are not listed in the normal visual picker and should not
+be referenced from public pages or layouts. The host renders configuration
+pages on a `1200x740` canvas and keeps secret fields in host-owned UI.
+
+`exports.assets`
+
+Package-owned static files. Visuals and components should resolve files through
+`context.assets.url(ref)` instead of using local filesystem paths or assuming
+how the host serves package content.
+
+`exports.schemas`
+
+Package-owned schema files that tools or future host features can inspect.
+Visual instance settings, component props, service methods, and package
+settings already have dedicated manifest fields, so use those fields for
+runtime form and validation surfaces.
+
+## Runtime APIs
+
+Telemetry and plugin bus:
+
+- Visuals subscribe with `context.bus.subscribe(eventName, callback)`.
+- Services and connectors can also publish with `context.bus.emit(eventName,
+  payload)`.
+- Rocket League events use their telemetry event names.
+- Package events should use the `plugin.<package-id>.*` namespace and matching
+  permissions.
+
+Registry:
+
+- Visuals get read-only access through `context.registry.get(key)`.
+- Services and connectors can read and write permitted keys.
+- Registry keys are useful for latest snapshots and small shared runtime state.
+
+Storage:
+
+- Services and connectors can read and write permitted text storage URIs such
+  as `plugin://self/state.json`.
+- Storage is for package-owned persistent data, not secrets.
+
+Service RPC:
+
+- Visuals, services, and connectors call imported or same-package services with
+  `context.services.call(ref, method, input)`.
+- Inputs and outputs should be JSON-compatible because calls cross a
+  host-mediated boundary.
+
+Settings and secrets:
+
+- Visuals receive merged package and instance settings as plain
+  `context.settings`.
+- Services and connectors read package settings through
+  `context.settings.get(key)` and `context.settings.all()`.
+- Secret settings are stored by the host and exposed only to connectors through
+  `context.secrets`.
+
+Diagnostics:
+
+- Contexts expose `diagnostics.log`, `diagnostics.warn`, and
+  `diagnostics.error`.
+- Prefer diagnostics over ad hoc logging in package runtime code.
+
+## Editor And Preview Surfaces
+
+The editor has two distinct modes.
+
+Editor mode mounts visuals with `context.mode === "editor"`. A visual can
+provide a representative default state, and editor actions can trigger local
+events such as goal, overtime, or victory. This mode is purely visual. It must
+not be used as a replacement for backend services or real runtime data flow.
+
+Preview mode mounts the same visual through its normal runtime behavior. It is
+the mode to use when checking the complete chain: backend services, permitted
+bus reads and publishes, registry snapshots, service RPC, settings, and real
+host runtime behavior.
+
+For event-driven animation visuals, prefer no automatic editor trigger on
+mount. Show an idle or default state first, then expose explicit editor actions
+for the states authors need to inspect.
+
+## Packaging And Distribution
+
+The normal development loop is:
+
+```sh
+npm run build
+npm run check
+npm run validate
+npm run pack
+npm run install:local
+```
+
+`validate` checks manifest shape, runtime API compatibility, package settings
+schemas, built entries, page and layout template paths, configuration page
+paths, and local package boundaries.
+
+`pack` writes package hashes and a `.brlp` archive. Signed packages can also
+include `signature.ed25519`. Signing and marketplace metadata help distribution
+integrity, but plugin code remains untrusted and host-enforced permissions
+remain the runtime boundary.
+

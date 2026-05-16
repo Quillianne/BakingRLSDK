@@ -6,6 +6,11 @@
 This page shows the common ways to author a BakingRL plugin package after it
 has been generated.
 
+Use [Plugin Capabilities](plugin-capabilities.qd) for the complete package
+surface, [Plugin Best Practices](plugin-best-practices.qd) for design guidance,
+and [Fullstack Plugin Tutorial](fullstack-plugin-tutorial.qd) for an
+end-to-end visual plus service walkthrough.
+
 The generated template uses Vite, TypeScript, and ESM entry files. Each export
 listed in `bakingrl.plugin.json` must have a matching Vite build input that
 emits the declared `dist/...js` file.
@@ -71,6 +76,51 @@ export default defineVisual({
         `${blue?.Name ?? "Blue"} ${blue?.Score ?? 0} - ` +
         `${orange?.Score ?? 0} ${orange?.Name ?? "Orange"}`;
     });
+  }
+});
+```
+
+For the host editor, a visual can expose local editor-only states and actions.
+These events do not reach the live host bus:
+
+```ts
+export default defineVisual({
+  mount(context: VisualContext) {
+    context.root.textContent = "Waiting";
+    return context.bus.subscribe("UpdateState", (event) => {
+      const teams = event.Data.Game.Teams;
+      context.root.textContent = `${teams[0]?.Score ?? 0} - ${teams[1]?.Score ?? 0}`;
+    });
+  },
+  editor: {
+    mount(context: VisualContext) {
+      context.editor?.emit("UpdateState", {
+        Game: {
+          Teams: [
+            { TeamNum: 0, Name: "Blue", Score: 1 },
+            { TeamNum: 1, Name: "Orange", Score: 0 }
+          ]
+        }
+      } as any);
+    },
+    actions() {
+      return [
+        {
+          id: "tie",
+          label: "Tie",
+          run(context: VisualContext) {
+            context.editor?.emit("UpdateState", {
+              Game: {
+                Teams: [
+                  { TeamNum: 0, Name: "Blue", Score: 2 },
+                  { TeamNum: 1, Name: "Orange", Score: 2 }
+                ]
+              }
+            } as any);
+          }
+        }
+      ];
+    }
   }
 });
 ```
