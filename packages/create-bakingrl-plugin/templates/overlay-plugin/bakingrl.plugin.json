@@ -24,13 +24,14 @@
     "visuals": {},
     "views": {},
     "pages": {},
-    "overlays": {},
-    "webviews": {
-      "home": {
-        "title": "__PLUGIN_NAME__",
-        "entry": "dist/webviews/home.js"
+    "overlays": {
+      "main": {
+        "title": "__PLUGIN_NAME__ Overlay",
+        "entry": "dist/overlays/main.js",
+        "defaultSize": [640, 180]
       }
     },
+    "webviews": {},
     "configuration": {},
     "assets": {},
     "schemas": {}
@@ -38,7 +39,7 @@
   "capabilities": {
     "permissions": {
       "bus": {
-        "read": [],
+        "read": ["UpdateState", "GoalScored"],
         "publish": ["plugin.__PLUGIN_ID__.*"]
       },
       "registry": {

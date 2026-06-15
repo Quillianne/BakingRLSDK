@@ -1,6 +1,6 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "1.0.0";
+export const SDK_VERSION = "1.0.1";
 export const RUNTIME_API_VERSION = "1.0.0";
 export const SUPPORTED_RUNTIME_API_RANGE = ">=1.0.0 <2.0.0";
 
@@ -149,6 +149,7 @@ export type ExtensionKind = "extensionHost";
 
 export type ActivationEvent =
   | "*"
+  | "onStartup"
   | "onStartupFinished"
   | `onCommand:${string}`
   | `onView:${string}`
@@ -261,40 +262,50 @@ export type RuntimeExtensionHost = {
   entry: string;
 };
 
-export type RuntimeSidecarKind = "jsonrpc-stdio";
+export type RuntimeSidecarProtocol = "jsonrpc-stdio";
+export type RuntimeSidecarActivation = "manual" | "onActivation" | "onStartup";
+export type RuntimeSidecarPlatform = "darwin" | "linux" | "win32";
 
 export type RuntimeSidecar = {
-  kind: RuntimeSidecarKind;
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  platforms?: RuntimeSidecarPlatform[];
+  protocol: RuntimeSidecarProtocol;
+  activation: RuntimeSidecarActivation;
 };
 
 export type RuntimeDeclaration = {
-  api: RuntimeApiVersion | string;
   extensionHost: RuntimeExtensionHost;
-  sidecars?: Record<string, RuntimeSidecar>;
+  sidecars: Record<string, RuntimeSidecar>;
 };
 
 export type ContributionCommand = {
-  command: string;
   title: string;
   category?: string;
   icon?: string;
 };
 
 export type ContributionService = {
-  id: string;
   title?: string;
   methods?: string[];
   sidecar?: string;
   schema?: string;
 };
 
-export type ContributionWebview = {
-  id: string;
-  title: string;
+export type ContributionVisual = {
+  title?: string;
+  description?: string;
   entry: string;
+  defaultSize?: [number, number];
+  settings?: string;
+};
+
+export type ContributionWebview = {
+  title?: string;
+  description?: string;
+  entry?: string;
+  path?: string;
   icon?: string;
   configuration?: string;
 };
@@ -308,38 +319,40 @@ export type ContributionOverlay = ContributionWebview & {
 };
 
 export type ContributionConfiguration = {
-  id: string;
   title?: string;
+  description?: string;
   schema: string;
 };
 
 export type ContributionAsset = {
-  id: string;
   path: string;
 };
 
 export type ContributionSchema = {
-  id: string;
   path: string;
 };
 
 export type PluginManifestV3Contributes = {
-  commands?: ContributionCommand[];
-  services?: ContributionService[];
-  views?: ContributionWebview[];
-  pages?: ContributionPage[];
-  overlays?: ContributionOverlay[];
-  configuration?: ContributionConfiguration[];
-  assets?: ContributionAsset[];
-  schemas?: ContributionSchema[];
+  commands: Record<string, ContributionCommand>;
+  services: Record<string, ContributionService>;
+  visuals: Record<string, ContributionVisual>;
+  views: Record<string, ContributionWebview>;
+  pages: Record<string, ContributionPage>;
+  overlays: Record<string, ContributionOverlay>;
+  webviews: Record<string, ContributionWebview>;
+  configuration: Record<string, ContributionConfiguration>;
+  assets: Record<string, ContributionAsset>;
+  schemas: Record<string, ContributionSchema>;
 };
 
 export type ExtensionCapability =
   | "commands"
   | "services"
+  | "visuals"
   | "views"
   | "pages"
   | "overlays"
+  | "webviews"
   | "configuration"
   | "assets"
   | "schemas"
@@ -350,8 +363,33 @@ export type ExtensionCapability =
 
 export type PluginCapabilityDeclaration = Partial<Record<ExtensionCapability, boolean | string[]>>;
 
+export type ManifestPermissionDeclaration = {
+  bus?: {
+    read?: string[];
+    publish?: string[];
+  };
+  registry?: {
+    read?: string[];
+    write?: string[];
+  };
+  network?: {
+    http?: string[];
+    websocket?: string[];
+  };
+  storage?: string[];
+};
+
+export type PluginManifestV3Capabilities = PluginCapabilityDeclaration & {
+  permissions: ManifestPermissionDeclaration;
+};
+
+export type PluginManifestV3Activation = {
+  events: ActivationEvent[];
+};
+
 export type PluginManifestV3 = {
   schema: "bakingrl.plugin/3";
+  kind: "trusted";
   id: string;
   name: string;
   version: string;
@@ -359,12 +397,15 @@ export type PluginManifestV3 = {
   author?: string;
   description?: string;
   license?: string;
+  compatibility: ManifestCompatibility;
+  activation: PluginManifestV3Activation;
   runtime: RuntimeDeclaration;
-  activationEvents?: ActivationEvent[];
-  contributes?: PluginManifestV3Contributes;
-  capabilities?: PluginCapabilityDeclaration;
+  contributes: PluginManifestV3Contributes;
+  capabilities: PluginManifestV3Capabilities;
+  settings?: string;
   diagnostics?: {
     enabled?: boolean;
+    channel?: string;
   };
   safeMode?: {
     supported?: boolean;

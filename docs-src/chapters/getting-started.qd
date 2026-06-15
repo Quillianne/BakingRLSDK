@@ -32,11 +32,11 @@ npm install
 Generated packages use the published SDK dependency:
 
 ```json
-"@bakingrl/plugin-sdk": "^0.4.0"
+"@bakingrl/plugin-sdk": "^1.0.1"
 ```
 
 The generated manifest also declares `compatibility.runtimeApi` with the
-current runtime API version, `0.4.0`.
+current runtime API version, `1.0.0`.
 
 ## Create A Package From A Local SDK Checkout
 

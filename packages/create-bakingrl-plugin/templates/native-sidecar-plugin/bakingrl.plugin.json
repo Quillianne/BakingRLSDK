@@ -13,24 +13,34 @@
     "extensionHost": {
       "entry": "dist/extension/index.js"
     },
-    "sidecars": {}
+    "sidecars": {
+      "native-helper": {
+        "command": "sidecars/native-helper/target/release/__PLUGIN_SLUG__-sidecar",
+        "args": [],
+        "env": {},
+        "platforms": ["darwin", "linux"],
+        "protocol": "jsonrpc-stdio",
+        "activation": "onActivation"
+      }
+    }
   },
   "activation": {
     "events": ["onStartup"]
   },
   "contributes": {
     "commands": {},
-    "services": {},
+    "services": {
+      "native": {
+        "title": "Native Helper",
+        "sidecar": "native-helper",
+        "methods": ["ping"]
+      }
+    },
     "visuals": {},
     "views": {},
     "pages": {},
     "overlays": {},
-    "webviews": {
-      "home": {
-        "title": "__PLUGIN_NAME__",
-        "entry": "dist/webviews/home.js"
-      }
-    },
+    "webviews": {},
     "configuration": {},
     "assets": {},
     "schemas": {}

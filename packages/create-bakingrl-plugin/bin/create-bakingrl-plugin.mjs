@@ -9,7 +9,7 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatesRoot = join(packageRoot, "templates");
 const helperPath = join(packageRoot, "lib", "bakingrl-plugin.mjs");
 const runtimeApiVersion = "1.0.0";
-const sdkVersion = "1.0.0";
+const sdkVersion = "1.0.1";
 
 const templates = [
   {
@@ -21,6 +21,16 @@ const templates = [
     id: "extension-plugin",
     label: "Trusted Extension Plugin Package",
     description: "Manifest v3 package with an extension host entry and webview contribution."
+  },
+  {
+    id: "overlay-plugin",
+    label: "Trusted Overlay Plugin Package",
+    description: "Manifest v3 package with an extension host entry and overlay contribution."
+  },
+  {
+    id: "native-sidecar-plugin",
+    label: "Trusted Native Sidecar Plugin Package",
+    description: "Manifest v3 package with a Rust JSON-RPC stdio sidecar."
   }
 ];
 
@@ -73,7 +83,7 @@ function sdkDependency(packageDir) {
   const localSdkPath = resolve(packageRoot, "..", "plugin-sdk");
   if (existsSync(localSdkPath)) return packageRelativeFileDependency(packageDir, localSdkPath);
 
-  return "^1.0.0";
+  return "^1.0.1";
 }
 
 function copyTemplate(source, target, replacements) {
@@ -87,7 +97,7 @@ function copyTemplate(source, target, replacements) {
       copyTemplate(sourcePath, targetPath, replacements);
       continue;
     }
-    const textExtensions = new Set([".json", ".ts", ".js", ".svelte", ".html", ".css", ".md"]);
+    const textExtensions = new Set([".json", ".ts", ".js", ".svelte", ".html", ".css", ".md", ".toml", ".rs"]);
     const ext = entry.includes(".") ? entry.slice(entry.lastIndexOf(".")) : "";
     if (textExtensions.has(ext)) {
       let content = readFileSync(sourcePath, "utf8");

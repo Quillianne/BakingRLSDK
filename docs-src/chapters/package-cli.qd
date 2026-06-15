@@ -45,7 +45,8 @@ Arguments and options:
 - `directory-name`: target package directory. If omitted, the command prompts
   for it.
 - `--template <template-id>` or `-t <template-id>`: template to use. The
-  current templates are `fullstack-plugin` and `extension-plugin`.
+  current templates are `fullstack-plugin`, `extension-plugin`,
+  `overlay-plugin`, and `native-sidecar-plugin`.
 - `--force`: removes an existing target directory before writing the template.
   Use this only when the target can be overwritten.
 
@@ -57,6 +58,10 @@ The generator:
 - writes package metadata into `package.json` and `bakingrl.plugin.json`;
 - copies the package helper to `scripts/bakingrl-plugin.mjs`;
 - prints the next build, pack, and local install commands.
+
+`native-sidecar-plugin` includes a minimal Rust sidecar crate with `anyhow`,
+`serde`, `serde_json`, and `tokio`. The template does not include a generated
+`Cargo.lock`.
 
 Example:
 
@@ -85,6 +90,8 @@ Generated packages expose these scripts:
   "build": "vite build",
   "check": "tsc --noEmit",
   "validate": "node scripts/bakingrl-plugin.mjs validate",
+  "doctor": "node scripts/bakingrl-plugin.mjs doctor",
+  "migrate:v2": "node scripts/bakingrl-plugin.mjs migrate-v2",
   "add": "node scripts/bakingrl-plugin.mjs add",
   "pack": "node scripts/bakingrl-plugin.mjs pack",
   "keygen": "node scripts/bakingrl-plugin.mjs keygen",
@@ -123,7 +130,8 @@ Validation checks:
 - `id`, `name`, and `version` are non-empty strings;
 - `id` uses supported characters, has no empty dot segments, and does not use
   the reserved `plugin.` runtime prefix;
-- `compatibility.runtimeApi` exists and targets helper runtime API `0.4.x`;
+- `compatibility.runtimeApi` exists and targets helper runtime API range
+  `>=1.0.0 <2.0.0`;
 - package-level `settings`, when declared, points to a JSON Schema object with
   supported primitive fields;
 - secret settings use `type: "string"`, `x-bakingrl-secret: true`, and no
@@ -142,10 +150,15 @@ For manifest v3 trusted extension packages, validation also checks:
 - `runtime.extensionHost.entry` points to an existing built `.js` file inside
   the package;
 - `activation.events` is a non-empty string array;
-- `runtime.sidecars` is an object and each declared sidecar path stays inside
-  the package and exists;
-- `contributes.webviews` entries are objects, and declared webview entries or
-  paths exist inside the package;
+- `runtime.sidecars` is an object map. Each sidecar declares `command`,
+  `protocol: "jsonrpc-stdio"`, and `activation: "manual"`,
+  `"onActivation"`, or `"onStartup"`; optional `args`, `env`, and `platforms`
+  are validated, and `command` stays inside the package and exists;
+- `contributes` contains object maps for `commands`, `services`, `visuals`,
+  `views`, `pages`, `overlays`, `webviews`, `configuration`, `assets`, and
+  `schemas`;
+- declared v3 contribution entries, paths, schemas, and assets exist inside
+  the package, and build entries point to built `.js` files;
 - `capabilities.permissions` uses the supported bus, registry, network, and
   storage permission arrays.
 
@@ -194,6 +207,34 @@ bakingrl-plugin inspect ./my-package
 
 Use `inspect` before packaging when you want to verify which runtime surface the
 host will see.
+
+`doctor [package-dir]`
+
+Validates the package and prints a JSON health summary with manifest identity,
+runtime compatibility, build entries, sidecar keys, activation, and v3
+contribution keys.
+
+```sh
+npm run doctor
+bakingrl-plugin doctor ./my-package
+```
+
+`migrate-v2 [package-dir] [--write|--output <path>]`
+
+Reads a `bakingrl.plugin/2` manifest and produces a `bakingrl.plugin/3`
+manifest JSON using the v3 maps. By default the migrated manifest is printed to
+stdout. `--output` writes it to a separate file. `--write` replaces
+`bakingrl.plugin.json` in the package directory.
+
+```sh
+bakingrl-plugin migrate-v2 ./my-package
+bakingrl-plugin migrate-v2 ./my-package --output bakingrl.plugin.v3.json
+bakingrl-plugin migrate-v2 ./my-package --write
+```
+
+The migration keeps reusable v2 declarations where there is a direct v3 field
+and creates a placeholder `runtime.extensionHost.entry`. Review extension code,
+sidecars, and capabilities before validating or packing the migrated package.
 
 `validate-listing [package-dir]`
 

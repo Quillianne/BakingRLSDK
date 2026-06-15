@@ -30,7 +30,10 @@ Core v2 fields:
 Trusted extension packages use `schema: "bakingrl.plugin/3"` and
 `kind: "trusted"` instead of v2 `exports`. Their runtime surface is declared
 with `runtime.extensionHost.entry`, `activation.events`,
-`runtime.sidecars`, `contributes.webviews`, and `capabilities.permissions`.
+`runtime.sidecars`, `contributes`, and `capabilities.permissions`.
+The v3 `contributes` object contains maps for `commands`, `services`,
+`visuals`, `views`, `pages`, `overlays`, `webviews`, `configuration`,
+`assets`, and `schemas`.
 
 Generated packages also contain Vite inputs, TypeScript source files, package
 helper scripts, and built `dist/` entries that must match the manifest.

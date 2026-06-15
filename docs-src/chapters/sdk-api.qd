@@ -36,8 +36,9 @@ and mock event helpers from the telemetry module.
 `SDK_VERSION` is the SDK helper version. `RUNTIME_API_VERSION` is the host
 contract version that generated manifests should declare.
 `SUPPORTED_RUNTIME_API_RANGE` is the host compatibility range represented by
-this SDK release. In this release, `SDK_VERSION` and `RUNTIME_API_VERSION` are
-`0.4.0`, and `SUPPORTED_RUNTIME_API_RANGE` is `>=0.4.0 <0.5.0`.
+this SDK release. In this release, `SDK_VERSION` is `1.0.1`,
+`RUNTIME_API_VERSION` is `1.0.0`, and `SUPPORTED_RUNTIME_API_RANGE` is
+`>=1.0.0 <2.0.0`.
 
 ## JSON Utility Types
 
@@ -276,6 +277,10 @@ service export when other plugin code needs callable methods.
 The SDK exports TypeScript types for `bakingrl.plugin.json`:
 
 - `PluginManifest`
+- `PluginManifestV3`
+- `PluginManifestV3Activation`
+- `PluginManifestV3Contributes`
+- `PluginManifestV3Capabilities`
 - `ManifestCompatibility`
 - `ManifestVisualExport`
 - `ManifestComponentExport`
@@ -283,6 +288,8 @@ The SDK exports TypeScript types for `bakingrl.plugin.json`:
 - `ManifestConnectorExport`
 - `ManifestTemplateExport`
 - `ManifestConfigurationExport`
+- `RuntimeDeclaration`
+- `RuntimeSidecar`
 
 Use `currentCompatibility()` when generating manifests from tools or tests:
 
@@ -293,6 +300,13 @@ const compatibility = currentCompatibility();
 ```
 
 It returns the current `runtimeApi` and `sdk` versions for this SDK release.
+
+Manifest v3 contribution fields are maps keyed by contribution name:
+`commands`, `services`, `visuals`, `views`, `pages`, `overlays`, `webviews`,
+`configuration`, `assets`, and `schemas`. `runtime.sidecars` is also a map,
+where each sidecar declares `command`, optional `args`, optional `env`,
+optional `platforms`, `protocol: "jsonrpc-stdio"`, and activation mode
+`manual`, `onActivation`, or `onStartup`.
 
 ## Visual Context
 
