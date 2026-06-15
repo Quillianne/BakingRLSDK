@@ -1,8 +1,8 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "0.4.0";
-export const RUNTIME_API_VERSION = "0.4.0";
-export const SUPPORTED_RUNTIME_API_RANGE = ">=0.4.0 <0.5.0";
+export const SDK_VERSION = "1.0.0";
+export const RUNTIME_API_VERSION = "1.0.0";
+export const SUPPORTED_RUNTIME_API_RANGE = ">=1.0.0 <2.0.0";
 
 export * from "./telemetry.js";
 
@@ -140,6 +140,268 @@ export type Diagnostics = {
   error(message: string, data?: unknown): void;
 };
 
+export type RuntimeApiVersion = typeof RUNTIME_API_VERSION;
+export type SupportedRuntimeApiRange = typeof SUPPORTED_RUNTIME_API_RANGE;
+
+export type ExtensionMode = "development" | "production" | "test";
+
+export type ExtensionKind = "extensionHost";
+
+export type ActivationEvent =
+  | "*"
+  | "onStartupFinished"
+  | `onCommand:${string}`
+  | `onView:${string}`
+  | `onPage:${string}`
+  | `onOverlay:${string}`
+  | `onService:${string}`
+  | `onConfiguration:${string}`
+  | `workspaceContains:${string}`;
+
+export type ExtensionSubscription = {
+  dispose(): void | Promise<void>;
+};
+
+export type Disposable = ExtensionSubscription;
+
+export type ExtensionLogger = {
+  trace(message: string, data?: unknown): void;
+  debug(message: string, data?: unknown): void;
+  info(message: string, data?: unknown): void;
+  warn(message: string, data?: unknown): void;
+  error(message: string, data?: unknown): void;
+};
+
+export type ExtensionDiagnosticSeverity = "info" | "warning" | "error";
+
+export type ExtensionDiagnostic = {
+  code: string;
+  severity: ExtensionDiagnosticSeverity;
+  message: string;
+  source?: string;
+  data?: JsonValue;
+};
+
+export type ExtensionDiagnostics = {
+  report(diagnostic: ExtensionDiagnostic): void;
+  clear(code?: string): void;
+};
+
+export type ExtensionSafeMode = {
+  enabled: boolean;
+  reason?: string;
+};
+
+export type ExtensionContext = {
+  extension: {
+    id: string;
+    name: string;
+    version: string;
+    runtimeApi: RuntimeApiVersion | string;
+  };
+  mode: ExtensionMode;
+  subscriptions: ExtensionSubscription[];
+  storage: PluginStorage;
+  logger: ExtensionLogger;
+  diagnostics: ExtensionDiagnostics;
+  safeMode: ExtensionSafeMode;
+  secrets: SecretReader;
+  configuration: SettingsReader;
+  commands: ExtensionCommandRegistry;
+  services: ExtensionServiceRegistry;
+  views: ExtensionViewRegistry;
+  pages: ExtensionPageRegistry;
+  overlays: ExtensionOverlayRegistry;
+  assets: AssetResolver;
+};
+
+export type ExtensionActivate = (context: ExtensionContext) => void | ExtensionSubscription | Promise<void | ExtensionSubscription>;
+
+export type ExtensionDeactivate = () => void | Promise<void>;
+
+export type ExtensionModule = {
+  activate?: ExtensionActivate;
+  deactivate?: ExtensionDeactivate;
+};
+
+export type ExtensionCommand = (...args: unknown[]) => unknown | Promise<unknown>;
+
+export type ExtensionCommandRegistry = {
+  registerCommand(command: string, handler: ExtensionCommand): ExtensionSubscription;
+  executeCommand<TOutput = unknown>(command: string, ...args: unknown[]): Promise<TOutput>;
+};
+
+export type ExtensionServiceMethod = (input: unknown, context: ExtensionContext) => unknown | Promise<unknown>;
+
+export type ExtensionServiceRegistry = {
+  registerService(id: string, methods: Record<string, ExtensionServiceMethod>): ExtensionSubscription;
+  call<TOutput = unknown>(service: string, method: string, input?: unknown): Promise<TOutput>;
+};
+
+export type ExtensionWebviewProviderContext = {
+  webview: WebviewEndpoint;
+  extension: ExtensionContext;
+};
+
+export type ExtensionViewProvider = (context: ExtensionWebviewProviderContext) => void | ExtensionSubscription | Promise<void | ExtensionSubscription>;
+
+export type ExtensionViewRegistry = {
+  registerView(id: string, provider: ExtensionViewProvider): ExtensionSubscription;
+};
+
+export type ExtensionPageRegistry = {
+  registerPage(id: string, provider: ExtensionViewProvider): ExtensionSubscription;
+};
+
+export type ExtensionOverlayRegistry = {
+  registerOverlay(id: string, provider: ExtensionViewProvider): ExtensionSubscription;
+};
+
+export type RuntimeExtensionHost = {
+  entry: string;
+};
+
+export type RuntimeSidecarKind = "jsonrpc-stdio";
+
+export type RuntimeSidecar = {
+  kind: RuntimeSidecarKind;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+};
+
+export type RuntimeDeclaration = {
+  api: RuntimeApiVersion | string;
+  extensionHost: RuntimeExtensionHost;
+  sidecars?: Record<string, RuntimeSidecar>;
+};
+
+export type ContributionCommand = {
+  command: string;
+  title: string;
+  category?: string;
+  icon?: string;
+};
+
+export type ContributionService = {
+  id: string;
+  title?: string;
+  methods?: string[];
+  sidecar?: string;
+  schema?: string;
+};
+
+export type ContributionWebview = {
+  id: string;
+  title: string;
+  entry: string;
+  icon?: string;
+  configuration?: string;
+};
+
+export type ContributionPage = ContributionWebview & {
+  route?: string;
+};
+
+export type ContributionOverlay = ContributionWebview & {
+  defaultSize?: [number, number];
+};
+
+export type ContributionConfiguration = {
+  id: string;
+  title?: string;
+  schema: string;
+};
+
+export type ContributionAsset = {
+  id: string;
+  path: string;
+};
+
+export type ContributionSchema = {
+  id: string;
+  path: string;
+};
+
+export type PluginManifestV3Contributes = {
+  commands?: ContributionCommand[];
+  services?: ContributionService[];
+  views?: ContributionWebview[];
+  pages?: ContributionPage[];
+  overlays?: ContributionOverlay[];
+  configuration?: ContributionConfiguration[];
+  assets?: ContributionAsset[];
+  schemas?: ContributionSchema[];
+};
+
+export type ExtensionCapability =
+  | "commands"
+  | "services"
+  | "views"
+  | "pages"
+  | "overlays"
+  | "configuration"
+  | "assets"
+  | "schemas"
+  | "secrets"
+  | "storage"
+  | "network"
+  | "sidecars";
+
+export type PluginCapabilityDeclaration = Partial<Record<ExtensionCapability, boolean | string[]>>;
+
+export type PluginManifestV3 = {
+  schema: "bakingrl.plugin/3";
+  id: string;
+  name: string;
+  version: string;
+  publisher?: string;
+  author?: string;
+  description?: string;
+  license?: string;
+  runtime: RuntimeDeclaration;
+  activationEvents?: ActivationEvent[];
+  contributes?: PluginManifestV3Contributes;
+  capabilities?: PluginCapabilityDeclaration;
+  diagnostics?: {
+    enabled?: boolean;
+  };
+  safeMode?: {
+    supported?: boolean;
+  };
+};
+
+export type WebviewMessage<TType extends string = string, TPayload = unknown> = {
+  type: TType;
+  payload?: TPayload;
+  requestId?: string;
+};
+
+export type WebviewRequest<TType extends string = string, TPayload = unknown> = WebviewMessage<TType, TPayload> & {
+  requestId: string;
+};
+
+export type WebviewResponse<TPayload = unknown> = {
+  type: "response";
+  requestId: string;
+  payload?: TPayload;
+  error?: string;
+};
+
+export type WebviewEndpoint = {
+  postMessage<TType extends string, TPayload>(message: WebviewMessage<TType, TPayload>): void | Promise<void>;
+  onMessage<TMessage extends WebviewMessage>(handler: (message: TMessage) => void | Promise<void>): ExtensionSubscription;
+};
+
+export type WebviewBridge = {
+  post<TType extends string, TPayload = unknown>(type: TType, payload?: TPayload): void | Promise<void>;
+  request<TOutput = unknown, TType extends string = string, TPayload = unknown>(
+    type: TType,
+    payload?: TPayload
+  ): Promise<TOutput>;
+  on<TMessage extends WebviewMessage>(handler: (message: TMessage) => void | Promise<void>): ExtensionSubscription;
+};
+
 export type VisualExport = {
   mount(context: VisualContext): void | CleanupFn | Promise<void | CleanupFn>;
   update?(context: VisualContext): void | Promise<void>;
@@ -268,6 +530,10 @@ export function definePlugin<T extends PluginDefinition>(definition: T): T {
   return definition;
 }
 
+export function defineExtension<T extends ExtensionModule>(extension: T): T {
+  return extension;
+}
+
 export function defineVisual<T extends VisualExport>(visual: T): T {
   return visual;
 }
@@ -282,6 +548,30 @@ export function defineService<T extends ServiceExport>(service: T): T {
 
 export function defineConnector<T extends ConnectorExport>(connector: T): T {
   return connector;
+}
+
+export function createWebviewBridge(endpoint: WebviewEndpoint): WebviewBridge {
+  return {
+    post(type, payload) {
+      return endpoint.postMessage({ type, payload });
+    },
+    request(type, payload) {
+      const requestId = createRequestId();
+      return new Promise((resolve, reject) => {
+        const subscription = endpoint.onMessage<WebviewResponse>((message) => {
+          if (message.type !== "response" || message.requestId !== requestId) return;
+          void Promise.resolve(subscription.dispose()).finally(() => {
+            if (message.error) reject(new Error(message.error));
+            else resolve(message.payload as never);
+          });
+        });
+        void endpoint.postMessage({ type, payload, requestId });
+      });
+    },
+    on(handler) {
+      return endpoint.onMessage(handler);
+    }
+  };
 }
 
 export function currentCompatibility(): ManifestCompatibility {
@@ -462,4 +752,11 @@ function consoleDiagnostics(): Diagnostics {
       console.error(message, data);
     }
   };
+}
+
+function createRequestId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
 }

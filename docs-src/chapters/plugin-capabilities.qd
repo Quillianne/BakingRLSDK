@@ -15,7 +15,7 @@ service startup, network access, registry access, and package configuration.
 
 Every package is described by `bakingrl.plugin.json`.
 
-Core fields:
+Core v2 fields:
 
 - `schema`: must be `bakingrl.plugin/2`.
 - `id`: stable package identity, usually reverse-DNS style.
@@ -26,6 +26,11 @@ Core fields:
 - `imports`: components and services consumed from other packages.
 - `permissions`: host-mediated access requested by package code.
 - `settings`: package-level settings JSON Schema.
+
+Trusted extension packages use `schema: "bakingrl.plugin/3"` and
+`kind: "trusted"` instead of v2 `exports`. Their runtime surface is declared
+with `runtime.extensionHost.entry`, `activation.events`,
+`runtime.sidecars`, `contributes.webviews`, and `capabilities.permissions`.
 
 Generated packages also contain Vite inputs, TypeScript source files, package
 helper scripts, and built `dist/` entries that must match the manifest.
@@ -194,4 +199,3 @@ paths, and local package boundaries.
 include `signature.ed25519`. Signing and marketplace metadata help distribution
 integrity, but plugin code remains untrusted and host-enforced permissions
 remain the runtime boundary.
-

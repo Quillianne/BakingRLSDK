@@ -8,14 +8,19 @@ import { stdin as input, stdout as output } from "node:process";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatesRoot = join(packageRoot, "templates");
 const helperPath = join(packageRoot, "lib", "bakingrl-plugin.mjs");
-const runtimeApiVersion = "0.4.0";
-const sdkVersion = "0.4.0";
+const runtimeApiVersion = "1.0.0";
+const sdkVersion = "1.0.0";
 
 const templates = [
   {
     id: "fullstack-plugin",
     label: "Fullstack Plugin Package",
     description: "Package with visual, component, service, and connector exports."
+  },
+  {
+    id: "extension-plugin",
+    label: "Trusted Extension Plugin Package",
+    description: "Manifest v3 package with an extension host entry and webview contribution."
   }
 ];
 
@@ -68,7 +73,7 @@ function sdkDependency(packageDir) {
   const localSdkPath = resolve(packageRoot, "..", "plugin-sdk");
   if (existsSync(localSdkPath)) return packageRelativeFileDependency(packageDir, localSdkPath);
 
-  return "^0.4.0";
+  return "^1.0.0";
 }
 
 function copyTemplate(source, target, replacements) {
