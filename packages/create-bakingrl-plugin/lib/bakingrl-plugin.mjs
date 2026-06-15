@@ -105,14 +105,15 @@ function validateRuntimeCompatibility(manifest) {
   const runtimeApi = manifest.compatibility?.runtimeApi;
   const parsed = parseSemver(runtimeApi);
   if (!parsed) {
-    fail("manifest.compatibility.runtimeApi must declare a semver version like 0.4.0");
+    fail(`manifest.compatibility.runtimeApi must declare a semver version like ${runtimeApiVersion}`);
   }
-  if (parsed[0] !== 0 || parsed[1] !== 4) {
+  const helperRuntime = parseSemver(runtimeApiVersion);
+  if (!helperRuntime || parsed[0] !== helperRuntime[0] || parsed[1] !== helperRuntime[1]) {
     fail(`manifest.compatibility.runtimeApi ${runtimeApi} is not compatible with helper runtime API ${runtimeApiVersion}`);
   }
   const sdk = manifest.compatibility?.sdk;
   if (sdk !== undefined && !parseSemver(sdk)) {
-    fail("manifest.compatibility.sdk must be a semver version like 0.4.0");
+    fail(`manifest.compatibility.sdk must be a semver version like ${sdkVersion}`);
   }
 }
 
