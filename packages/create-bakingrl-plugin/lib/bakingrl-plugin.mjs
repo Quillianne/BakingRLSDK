@@ -63,7 +63,9 @@ function readPackageManifest(packageDir) {
   const manifestPath = join(packageDir, "bakingrl.plugin.json");
   if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
   const manifest = readJson(manifestPath);
-  if (manifest.schema !== "bakingrl.plugin/2") fail("manifest.schema must be bakingrl.plugin/2");
+  if (manifest.schema !== "bakingrl.plugin/2" && manifest.schema !== "bakingrl.plugin/3") {
+    fail("manifest.schema must be bakingrl.plugin/2 or bakingrl.plugin/3");
+  }
   for (const field of ["id", "name", "version"]) {
     if (typeof manifest[field] !== "string" || manifest[field].trim() === "") {
       fail(`manifest.${field} must be a non-empty string`);
@@ -71,6 +73,23 @@ function readPackageManifest(packageDir) {
   }
   validatePackageId(manifest.id);
   return manifest;
+}
+
+function assertPlainObject(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail(`${label} must be an object`);
+  }
+  return value;
+}
+
+function assertStringArray(value, label, { allowEmpty = true } = {}) {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.trim() === "")) {
+    fail(`${label} must be an array of non-empty strings`);
+  }
+  if (!allowEmpty && value.length === 0) {
+    fail(`${label} must contain at least one event`);
+  }
+  return value;
 }
 
 function parseSemver(value) {
@@ -140,6 +159,138 @@ function validatePackageSettingsSchema(packageDir, settingsPath) {
   }
 }
 
+function validatePackageV2(packageDir, manifest) {
+  validatePackageSettingsSchema(packageDir, manifest.settings);
+  if (!manifest.exports || typeof manifest.exports !== "object") {
+    fail("manifest.exports is required");
+  }
+  if (manifest.exports.overlays) {
+    fail("manifest.exports.overlays has been renamed to manifest.exports.layouts");
+  }
+  const entryGroups = [
+    ["visuals", manifest.exports.visuals ?? {}],
+    ["components", manifest.exports.components ?? {}],
+    ["services", manifest.exports.services ?? {}],
+    ["connectors", manifest.exports.connectors ?? {}]
+  ];
+  let exportCount = 0;
+  for (const [groupName, group] of entryGroups) {
+    for (const [name, exportDef] of Object.entries(group)) {
+      exportCount += 1;
+      validateBuiltEntry(packageDir, groupName, name, exportDef);
+    }
+  }
+  for (const [groupName, label, group] of [
+    ["pages", "Page", manifest.exports.pages ?? {}],
+    ["layouts", "Layout", manifest.exports.layouts ?? {}]
+  ]) {
+    for (const [name, exportDef] of Object.entries(group)) {
+      exportCount += 1;
+      validatePathField(packageDir, `${groupName}.${name}`, exportDef, "path", `${label} template`);
+    }
+  }
+  if (manifest.exports.configuration) {
+    exportCount += 1;
+    const configuration = manifest.exports.configuration;
+    validatePathField(packageDir, "configuration", configuration, "path", "Configuration page");
+    const visuals = configuration.visuals ?? {};
+    for (const [name, exportDef] of Object.entries(visuals)) {
+      validateBuiltEntry(packageDir, "configuration.visuals", name, exportDef);
+    }
+  }
+  if (exportCount === 0) fail("Package must export at least one capability");
+}
+
+function validatePathField(packageDir, label, object, field, artifactLabel) {
+  if (typeof object?.[field] !== "string" || object[field].trim() === "") {
+    fail(`${label}.${field} must point to a ${artifactLabel.toLowerCase()} file`);
+  }
+  const artifactPath = resolve(packageDir, object[field]);
+  if (!isInsideDirectory(packageDir, artifactPath)) {
+    fail(`${label}.${field} must stay inside the package`);
+  }
+  if (!existsSync(artifactPath)) {
+    fail(`${artifactLabel} does not exist: ${object[field]}`);
+  }
+  if (statSync(artifactPath).isFile() && statSync(artifactPath).size === 0) {
+    fail(`${artifactLabel} is empty: ${object[field]}`);
+  }
+}
+
+function validateV3Sidecar(packageDir, name, sidecar) {
+  if (typeof sidecar === "string") {
+    validatePathField(packageDir, `runtime.sidecars.${name}`, { path: sidecar }, "path", "Sidecar");
+    return;
+  }
+  assertPlainObject(sidecar, `runtime.sidecars.${name}`);
+  const pathField = ["path", "entry", "command"].find((field) => typeof sidecar[field] === "string");
+  if (!pathField) {
+    fail(`runtime.sidecars.${name} must declare path, entry, or command`);
+  }
+  validatePathField(packageDir, `runtime.sidecars.${name}`, sidecar, pathField, "Sidecar");
+  if (sidecar.args !== undefined) assertStringArray(sidecar.args, `runtime.sidecars.${name}.args`);
+}
+
+function validateContributes(packageDir, contributes) {
+  assertPlainObject(contributes, "manifest.contributes");
+  const webviews = contributes.webviews ?? {};
+  assertPlainObject(webviews, "manifest.contributes.webviews");
+  for (const [name, webview] of Object.entries(webviews)) {
+    assertPlainObject(webview, `contributes.webviews.${name}`);
+    if (webview.title !== undefined && (typeof webview.title !== "string" || webview.title.trim() === "")) {
+      fail(`contributes.webviews.${name}.title must be a non-empty string`);
+    }
+    if (webview.entry !== undefined) {
+      validatePathField(packageDir, `contributes.webviews.${name}`, webview, "entry", "Webview entry");
+    }
+    if (webview.path !== undefined) {
+      validatePathField(packageDir, `contributes.webviews.${name}`, webview, "path", "Webview file");
+    }
+  }
+}
+
+function validateCapabilities(capabilities) {
+  assertPlainObject(capabilities, "manifest.capabilities");
+  const permissions = capabilities.permissions ?? {};
+  assertPlainObject(permissions, "manifest.capabilities.permissions");
+  const bus = permissions.bus ?? {};
+  const registry = permissions.registry ?? {};
+  const network = permissions.network ?? {};
+  assertPlainObject(bus, "manifest.capabilities.permissions.bus");
+  assertPlainObject(registry, "manifest.capabilities.permissions.registry");
+  assertPlainObject(network, "manifest.capabilities.permissions.network");
+  for (const [key, value] of Object.entries(bus)) {
+    if (key !== "read" && key !== "publish") fail(`manifest.capabilities.permissions.bus.${key} is not supported`);
+    assertStringArray(value, `manifest.capabilities.permissions.bus.${key}`);
+  }
+  for (const [key, value] of Object.entries(registry)) {
+    if (key !== "read" && key !== "write") fail(`manifest.capabilities.permissions.registry.${key} is not supported`);
+    assertStringArray(value, `manifest.capabilities.permissions.registry.${key}`);
+  }
+  for (const [key, value] of Object.entries(network)) {
+    if (key !== "http" && key !== "websocket") fail(`manifest.capabilities.permissions.network.${key} is not supported`);
+    assertStringArray(value, `manifest.capabilities.permissions.network.${key}`);
+  }
+  if (permissions.storage !== undefined) assertStringArray(permissions.storage, "manifest.capabilities.permissions.storage");
+}
+
+function validatePackageV3(packageDir, manifest) {
+  if (manifest.kind !== "trusted") fail("manifest.kind must be trusted for bakingrl.plugin/3 packages");
+  const runtime = assertPlainObject(manifest.runtime, "manifest.runtime");
+  const extensionHost = assertPlainObject(runtime.extensionHost, "manifest.runtime.extensionHost");
+  validateBuiltEntry(packageDir, "runtime", "extensionHost", extensionHost);
+  const sidecars = runtime.sidecars;
+  assertPlainObject(sidecars, "manifest.runtime.sidecars");
+  for (const [name, sidecar] of Object.entries(sidecars)) {
+    validateV3Sidecar(packageDir, name, sidecar);
+  }
+  const activation = assertPlainObject(manifest.activation, "manifest.activation");
+  assertStringArray(activation.events, "manifest.activation.events", { allowEmpty: false });
+  validateContributes(packageDir, manifest.contributes);
+  validateCapabilities(manifest.capabilities);
+  validatePackageSettingsSchema(packageDir, manifest.settings);
+}
+
 function validateSettingsProperty(label, property) {
   if (!property || typeof property !== "object" || Array.isArray(property)) {
     fail(`${label} must be a JSON Schema property object`);
@@ -181,63 +332,11 @@ function inferSettingsPropertyType(property) {
 function validatePackage(packageDir) {
   const manifest = readPackageManifest(packageDir);
   validateRuntimeCompatibility(manifest);
-  validatePackageSettingsSchema(packageDir, manifest.settings);
-  if (!manifest.exports || typeof manifest.exports !== "object") {
-    fail("manifest.exports is required");
+  if (manifest.schema === "bakingrl.plugin/2") {
+    validatePackageV2(packageDir, manifest);
+  } else {
+    validatePackageV3(packageDir, manifest);
   }
-  if (manifest.exports.overlays) {
-    fail("manifest.exports.overlays has been renamed to manifest.exports.layouts");
-  }
-  const entryGroups = [
-    ["visuals", manifest.exports.visuals ?? {}],
-    ["components", manifest.exports.components ?? {}],
-    ["services", manifest.exports.services ?? {}],
-    ["connectors", manifest.exports.connectors ?? {}]
-  ];
-  let exportCount = 0;
-  for (const [groupName, group] of entryGroups) {
-    for (const [name, exportDef] of Object.entries(group)) {
-      exportCount += 1;
-      validateBuiltEntry(packageDir, groupName, name, exportDef);
-    }
-  }
-  for (const [groupName, label, group] of [
-    ["pages", "Page", manifest.exports.pages ?? {}],
-    ["layouts", "Layout", manifest.exports.layouts ?? {}]
-  ]) {
-    for (const [name, exportDef] of Object.entries(group)) {
-      exportCount += 1;
-      if (typeof exportDef.path !== "string" || exportDef.path.trim() === "") {
-        fail(`${groupName}.${name}.path must point to a ${label.toLowerCase()} template JSON file`);
-      }
-      const templatePath = resolve(packageDir, exportDef.path);
-      if (!isInsideDirectory(packageDir, templatePath)) {
-        fail(`${groupName}.${name}.path must stay inside the package`);
-      }
-      if (!existsSync(templatePath)) {
-        fail(`${label} template does not exist: ${exportDef.path}`);
-      }
-    }
-  }
-  if (manifest.exports.configuration) {
-    exportCount += 1;
-    const configuration = manifest.exports.configuration;
-    if (typeof configuration.path !== "string" || configuration.path.trim() === "") {
-      fail("configuration.path must point to a configuration page JSON file");
-    }
-    const pagePath = resolve(packageDir, configuration.path);
-    if (!isInsideDirectory(packageDir, pagePath)) {
-      fail("configuration.path must stay inside the package");
-    }
-    if (!existsSync(pagePath)) {
-      fail(`Configuration page does not exist: ${configuration.path}`);
-    }
-    const visuals = configuration.visuals ?? {};
-    for (const [name, exportDef] of Object.entries(visuals)) {
-      validateBuiltEntry(packageDir, "configuration.visuals", name, exportDef);
-    }
-  }
-  if (exportCount === 0) fail("Package must export at least one capability");
   console.log(`Package validation passed: ${manifest.id}`);
   return manifest;
 }
@@ -368,7 +467,9 @@ function validateListing(packageDir, { print = true } = {}) {
 function effectivePermissions(manifest) {
   const packageScope = `plugin.${manifest.id}.*`;
   const storageScope = "plugin://self/*";
-  const permissions = manifest.permissions ?? {};
+  const permissions = manifest.schema === "bakingrl.plugin/3"
+    ? manifest.capabilities?.permissions ?? {}
+    : manifest.permissions ?? {};
   const bus = permissions.bus ?? {};
   const registry = permissions.registry ?? {};
   const network = permissions.network ?? {};
@@ -938,14 +1039,24 @@ function pack(packageDir, keyPath) {
 
 function inspect(packageDir) {
   const manifest = validatePackage(packageDir);
-  console.log(JSON.stringify({
+  const summary = {
     id: manifest.id,
+    schema: manifest.schema,
+    kind: manifest.kind,
     version: manifest.version,
     compatibility: manifest.compatibility,
-    exports: manifest.exports,
-    imports: manifest.imports ?? {},
-    permissions: manifest.permissions ?? {}
-  }, null, 2));
+    imports: manifest.imports ?? {}
+  };
+  if (manifest.schema === "bakingrl.plugin/3") {
+    summary.runtime = manifest.runtime;
+    summary.activation = manifest.activation;
+    summary.contributes = manifest.contributes ?? {};
+    summary.capabilities = manifest.capabilities ?? {};
+  } else {
+    summary.exports = manifest.exports;
+    summary.permissions = manifest.permissions ?? {};
+  }
+  console.log(JSON.stringify(summary, null, 2));
 }
 
 function installLocal(packageDir) {

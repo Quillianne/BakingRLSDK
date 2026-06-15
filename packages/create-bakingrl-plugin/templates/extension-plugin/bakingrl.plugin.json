@@ -1,0 +1,46 @@
+{
+  "schema": "bakingrl.plugin/3",
+  "kind": "trusted",
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "compatibility": {
+    "runtimeApi": "__RUNTIME_API_VERSION__",
+    "sdk": "__PLUGIN_SDK_VERSION__"
+  },
+  "runtime": {
+    "extensionHost": {
+      "entry": "dist/extension/index.js"
+    },
+    "sidecars": {}
+  },
+  "activation": {
+    "events": ["onStartup"]
+  },
+  "contributes": {
+    "webviews": {
+      "home": {
+        "title": "__PLUGIN_NAME__",
+        "entry": "dist/webviews/home.js"
+      }
+    }
+  },
+  "capabilities": {
+    "permissions": {
+      "bus": {
+        "read": [],
+        "publish": ["plugin.__PLUGIN_ID__.*"]
+      },
+      "registry": {
+        "read": [],
+        "write": []
+      },
+      "network": {
+        "http": [],
+        "websocket": []
+      },
+      "storage": ["plugin://self/*"]
+    }
+  }
+}
