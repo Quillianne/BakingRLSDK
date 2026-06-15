@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && cargo build --manifest-path sidecars/native-helper/Cargo.toml --release",
     "check": "tsc --noEmit",
     "validate": "node scripts/bakingrl-plugin.mjs validate",
     "doctor": "node scripts/bakingrl-plugin.mjs doctor",

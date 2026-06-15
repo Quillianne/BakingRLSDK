@@ -21,8 +21,8 @@ sidecars, and requested host capabilities.
   "name": "My Package",
   "version": "1.0.0",
   "compatibility": {
-    "runtimeApi": "0.4.0",
-    "sdk": "0.4.0"
+    "runtimeApi": "1.0.0",
+    "sdk": "1.0.1"
   },
   "exports": {
     "visuals": {
@@ -95,8 +95,8 @@ Required for v3 packages. Current trusted extension packages use
 `runtime`
 
 Required for v3 packages. `runtime.extensionHost.entry` points to the built ESM
-entry loaded by the host extension runtime. `runtime.sidecars` lists packaged
-helper processes, if any.
+entry loaded by the host extension runtime. `runtime.sidecars` is an object map
+of packaged helper processes.
 
 `activation`
 
@@ -105,8 +105,10 @@ events that can start the extension, such as `onStartup`.
 
 `contributes`
 
-Required object for v3 packages. Current SDK tooling validates
-`contributes.webviews`, where each webview can declare a title and built entry.
+Required object for v3 packages. It contains object maps for `commands`,
+`services`, `visuals`, `views`, `pages`, `overlays`, `webviews`,
+`configuration`, `assets`, and `schemas`. Maps can be empty, but the keys are
+part of the public v3 shape.
 
 `capabilities`
 
@@ -134,7 +136,7 @@ page is declared.
 `compatibility.runtimeApi` is required for packages targeting current BakingRL
 hosts. The SDK scaffolder initializes it with the current runtime API version.
 
-Current host support is `>=0.4.0 <0.5.0`. Packages outside that range can still
+Current host support is `>=1.0.0 <2.0.0`. Packages outside that range can still
 be installed for inspection, but the host disables them and refuses activation
 until they are rebuilt for a compatible runtime API.
 
@@ -150,8 +152,8 @@ Minimal v3 package:
   "name": "Example Extension",
   "version": "1.0.0",
   "compatibility": {
-    "runtimeApi": "0.4.0",
-    "sdk": "0.4.0"
+    "runtimeApi": "1.0.0",
+    "sdk": "1.0.1"
   },
   "runtime": {
     "extensionHost": {
@@ -163,12 +165,21 @@ Minimal v3 package:
     "events": ["onStartup"]
   },
   "contributes": {
+    "commands": {},
+    "services": {},
+    "visuals": {},
+    "views": {},
+    "pages": {},
+    "overlays": {},
     "webviews": {
       "home": {
         "title": "Example Extension",
         "entry": "dist/webviews/home.js"
       }
-    }
+    },
+    "configuration": {},
+    "assets": {},
+    "schemas": {}
   },
   "capabilities": {
     "permissions": {
@@ -186,6 +197,9 @@ Minimal v3 package:
       },
       "storage": ["plugin://self/*"]
     }
+  },
+  "diagnostics": {
+    "enabled": true
   }
 }
 ```
@@ -197,8 +211,24 @@ package.
 Webviews are contributed UI surfaces declared in `contributes.webviews`. They
 are separate browser entries and should be built into `dist/`.
 
-Sidecars are packaged helper processes declared in `runtime.sidecars`. The
-helper CLI validates declared sidecar paths stay inside the package and exist.
+Sidecars are packaged helper processes declared in `runtime.sidecars`. Each
+sidecar map entry has this shape:
+
+```json
+{
+  "command": "sidecars/native-helper/target/release/native-helper",
+  "args": [],
+  "env": {},
+  "platforms": ["darwin", "linux"],
+  "protocol": "jsonrpc-stdio",
+  "activation": "onActivation"
+}
+```
+
+`command` is a package-relative executable path. `protocol` is currently
+`jsonrpc-stdio`. `activation` is `manual`, `onActivation`, or `onStartup`.
+The helper CLI validates declared sidecar commands stay inside the package and
+exist after the package is built.
 
 ## Visual Instance Settings
 

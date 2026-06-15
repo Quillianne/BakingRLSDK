@@ -64,7 +64,7 @@ npm run pack
 Published scaffolds use the published SDK package:
 
 ```json
-"@bakingrl/plugin-sdk": "^0.4.0"
+"@bakingrl/plugin-sdk": "^1.0.1"
 ```
 
 ## Local Global Install
@@ -144,6 +144,6 @@ npm run docs:dev
 
 ## Compatibility
 
-This SDK targets BakingRL plugin package schema `bakingrl.plugin/2`, SDK
-version `0.4.x`, and runtime API `0.4.0`. Current BakingRL hosts support
-runtime API range `>=0.4.0 <0.5.0`.
+This SDK targets BakingRL plugin package schemas `bakingrl.plugin/2` and
+`bakingrl.plugin/3`, SDK version `1.0.1`, and runtime API `1.0.0`. Current
+BakingRL hosts support runtime API range `>=1.0.0 <2.0.0`.

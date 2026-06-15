@@ -2,7 +2,7 @@ import { defineExtension, type ExtensionContext } from "@bakingrl/plugin-sdk";
 
 const extension = defineExtension({
   async activate(context: ExtensionContext) {
-    context.logger.info("__PLUGIN_NAME__ activated.");
+    context.logger.info("__PLUGIN_NAME__ native sidecar extension activated.");
   },
   async deactivate() {}
 });
