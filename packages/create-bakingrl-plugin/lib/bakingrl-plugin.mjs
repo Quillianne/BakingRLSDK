@@ -7,8 +7,8 @@ import { spawnSync } from "node:child_process";
 import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
-const runtimeApiVersion = "0.4.0";
-const sdkVersion = "0.4.0";
+const runtimeApiVersion = "1.0.0";
+const sdkVersion = "1.0.0";
 
 function fail(message) {
   console.error(message);
