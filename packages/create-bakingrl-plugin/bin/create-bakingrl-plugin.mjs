@@ -16,6 +16,11 @@ const templates = [
     id: "fullstack-plugin",
     label: "Fullstack Plugin Package",
     description: "Package with visual, component, service, and connector exports."
+  },
+  {
+    id: "extension-plugin",
+    label: "Trusted Extension Plugin Package",
+    description: "Manifest v3 package with an extension host entry and webview contribution."
   }
 ];
 

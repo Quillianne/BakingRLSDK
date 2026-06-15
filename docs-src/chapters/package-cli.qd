@@ -45,7 +45,7 @@ Arguments and options:
 - `directory-name`: target package directory. If omitted, the command prompts
   for it.
 - `--template <template-id>` or `-t <template-id>`: template to use. The
-  current template is `fullstack-plugin`.
+  current templates are `fullstack-plugin` and `extension-plugin`.
 - `--force`: removes an existing target directory before writing the template.
   Use this only when the target can be overwritten.
 
@@ -119,7 +119,7 @@ bakingrl-plugin validate ./my-package
 Validation checks:
 
 - `bakingrl.plugin.json` exists and is valid JSON;
-- `manifest.schema` is `bakingrl.plugin/2`;
+- `manifest.schema` is `bakingrl.plugin/2` or `bakingrl.plugin/3`;
 - `id`, `name`, and `version` are non-empty strings;
 - `id` uses supported characters, has no empty dot segments, and does not use
   the reserved `plugin.` runtime prefix;
@@ -135,6 +135,19 @@ Validation checks:
 - configuration page paths stay inside the package and private configuration
   visual entries point to built `.js` files;
 - deprecated `exports.overlays` is not used.
+
+For manifest v3 trusted extension packages, validation also checks:
+
+- `kind` is `trusted`;
+- `runtime.extensionHost.entry` points to an existing built `.js` file inside
+  the package;
+- `activation.events` is a non-empty string array;
+- `runtime.sidecars` is an object and each declared sidecar path stays inside
+  the package and exists;
+- `contributes.webviews` entries are objects, and declared webview entries or
+  paths exist inside the package;
+- `capabilities.permissions` uses the supported bus, registry, network, and
+  storage permission arrays.
 
 Run `npm run build` before `validate` because validation checks built entry
 files.
@@ -169,8 +182,10 @@ The helper refuses to overwrite existing source or manifest entries.
 
 `inspect [package-dir]`
 
-Validates the package and prints the normalized package ID, version, exports,
-imports, and permissions as JSON.
+Validates the package and prints the normalized package ID, schema, version,
+runtime compatibility, and relevant runtime surface as JSON. v2 output includes
+`exports` and `permissions`; v3 output includes `runtime`, `activation`,
+`contributes`, and `capabilities`.
 
 ```sh
 npm run inspect

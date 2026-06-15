@@ -3,7 +3,14 @@
 .include {docs}
 .doclang {en}
 
-BakingRL v2 packages are described by `bakingrl.plugin.json`.
+BakingRL packages are described by `bakingrl.plugin.json`.
+
+Use `bakingrl.plugin/2` for untrusted packages that expose visuals,
+components, services, connectors, pages, and layouts through `exports`.
+
+Use `bakingrl.plugin/3` for trusted extension packages. A v3 package declares
+`kind: "trusted"`, an extension host entry, activation events, contributed UI,
+sidecars, and requested host capabilities.
 
 ## Minimal Manifest
 
@@ -54,7 +61,7 @@ use of each capability.
 
 `schema`
 
-Must be `bakingrl.plugin/2`.
+Must be `bakingrl.plugin/2` or `bakingrl.plugin/3`.
 
 `id`
 
@@ -77,8 +84,34 @@ but recommended for diagnostics.
 
 `exports`
 
-Capabilities provided by the package. A package must export at least one
+Capabilities provided by a v2 package. A v2 package must export at least one
 capability.
+
+`kind`
+
+Required for v3 packages. Current trusted extension packages use
+`kind: "trusted"`.
+
+`runtime`
+
+Required for v3 packages. `runtime.extensionHost.entry` points to the built ESM
+entry loaded by the host extension runtime. `runtime.sidecars` lists packaged
+helper processes, if any.
+
+`activation`
+
+Required for v3 packages. `activation.events` is a non-empty list of host
+events that can start the extension, such as `onStartup`.
+
+`contributes`
+
+Required object for v3 packages. Current SDK tooling validates
+`contributes.webviews`, where each webview can declare a title and built entry.
+
+`capabilities`
+
+Required object for v3 packages. Host-mediated permissions live under
+`capabilities.permissions`.
 
 `imports`
 
@@ -104,6 +137,68 @@ hosts. The SDK scaffolder initializes it with the current runtime API version.
 Current host support is `>=0.4.0 <0.5.0`. Packages outside that range can still
 be installed for inspection, but the host disables them and refuses activation
 until they are rebuilt for a compatible runtime API.
+
+## Trusted Extension Manifest V3
+
+Minimal v3 package:
+
+```json
+{
+  "schema": "bakingrl.plugin/3",
+  "kind": "trusted",
+  "id": "com.example.extension",
+  "name": "Example Extension",
+  "version": "1.0.0",
+  "compatibility": {
+    "runtimeApi": "0.4.0",
+    "sdk": "0.4.0"
+  },
+  "runtime": {
+    "extensionHost": {
+      "entry": "dist/extension/index.js"
+    },
+    "sidecars": {}
+  },
+  "activation": {
+    "events": ["onStartup"]
+  },
+  "contributes": {
+    "webviews": {
+      "home": {
+        "title": "Example Extension",
+        "entry": "dist/webviews/home.js"
+      }
+    }
+  },
+  "capabilities": {
+    "permissions": {
+      "bus": {
+        "read": [],
+        "publish": ["plugin.com.example.extension.*"]
+      },
+      "registry": {
+        "read": [],
+        "write": []
+      },
+      "network": {
+        "http": [],
+        "websocket": []
+      },
+      "storage": ["plugin://self/*"]
+    }
+  }
+}
+```
+
+Extension host code runs through the host trusted-extension runtime, not the v2
+visual/service/connector loaders. Keep the entry as a built ESM file inside the
+package.
+
+Webviews are contributed UI surfaces declared in `contributes.webviews`. They
+are separate browser entries and should be built into `dist/`.
+
+Sidecars are packaged helper processes declared in `runtime.sidecars`. The
+helper CLI validates declared sidecar paths stay inside the package and exist.
 
 ## Visual Instance Settings
 
