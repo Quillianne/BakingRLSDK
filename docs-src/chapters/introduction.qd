@@ -17,7 +17,7 @@ Current packages use:
 - manifest schema `bakingrl.plugin/3`;
 - `kind: "trusted"`;
 - runtime API `1.0.0`;
-- SDK package version `1.0.2`;
+- SDK package version `1.0.3`;
 - one JavaScript extension host entry per package;
 - browser visuals, pages, overlays, views, and webviews declared through
   `contributes`;

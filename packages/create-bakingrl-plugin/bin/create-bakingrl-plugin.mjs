@@ -9,7 +9,7 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatesRoot = join(packageRoot, "templates");
 const helperPath = join(packageRoot, "lib", "bakingrl-plugin.mjs");
 const runtimeApiVersion = "1.0.0";
-const sdkVersion = "1.0.1";
+const sdkVersion = "1.0.3";
 
 const templates = [
   {
@@ -78,7 +78,7 @@ function sdkDependency(packageDir) {
   const localSdkPath = resolve(packageRoot, "..", "plugin-sdk");
   if (existsSync(localSdkPath)) return packageRelativeFileDependency(packageDir, localSdkPath);
 
-  return "^1.0.1";
+  return "^1.0.3";
 }
 
 function copyTemplate(source, target, replacements) {

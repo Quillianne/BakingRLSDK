@@ -8,7 +8,7 @@ import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
 const runtimeApiVersion = "1.0.0";
-const sdkVersion = "1.0.1";
+const sdkVersion = "1.0.3";
 const supportedRuntimeApiRange = ">=1.0.0 <2.0.0";
 const v3ContributionMaps = [
   "commands",

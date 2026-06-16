@@ -25,7 +25,7 @@ Available templates:
   sidecar.
 
 Generated packages declare `schema: "bakingrl.plugin/3"`, `kind: "trusted"`,
-`compatibility.runtimeApi: "1.0.0"`, and SDK `1.0.2`.
+`compatibility.runtimeApi: "1.0.0"`, and SDK `1.0.3`.
 
 ## Validate
 
