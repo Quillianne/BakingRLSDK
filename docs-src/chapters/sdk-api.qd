@@ -5,7 +5,7 @@
 
 The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v3 plugin
 contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/3`,
-SDK `1.0.1`, runtime API `1.0.0`.
+SDK `1.0.2`, runtime API `1.0.0`.
 
 The SDK is an authoring contract. Runtime behavior is provided by the host:
 package loading, extension host supervision, bridge calls, service routing,
@@ -155,7 +155,7 @@ The current protocol is JSON-RPC 2.0 over newline-delimited stdio.
 
 ## Utilities
 
-`currentCompatibility()` returns `{ runtimeApi: "1.0.0", sdk: "1.0.1" }`.
+`currentCompatibility()` returns `{ runtimeApi: "1.0.0", sdk: "1.0.2" }`.
 
 `setting(settings, key, fallback)` reads a typed value with a fallback.
 

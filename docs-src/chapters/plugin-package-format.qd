@@ -17,7 +17,7 @@ BakingRL packages are described by `bakingrl.plugin.json`. Current packages use
   "version": "1.0.0",
   "compatibility": {
     "runtimeApi": "1.0.0",
-    "sdk": "1.0.1"
+    "sdk": "1.0.2"
   },
   "runtime": {
     "extensionHost": {
