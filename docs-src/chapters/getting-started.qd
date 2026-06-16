@@ -3,160 +3,71 @@
 .include {docs}
 .doclang {en}
 
-This guide creates a complete BakingRL package with a visual, a component, a
-service, and a connector.
-
-## Prerequisites
-
-- Node.js 20 or newer.
-- npm 10 or newer.
-- A local BakingRL app checkout if you want to install and test packages in the
-  host application.
-
-## Create A Package From npm
-
-Install the published scaffolder:
+## Install The Generator
 
 ```sh
 npm install -g @bakingrl/create-plugin
 ```
 
-Create a package:
+This installs:
+
+- `create-bakingrl-plugin`;
+- `bakingrl-plugin`.
+
+## Create A Package
 
 ```sh
-create-bakingrl-plugin my-package
-cd my-package
+create-bakingrl-plugin my-plugin
+cd my-plugin
 npm install
-```
-
-Generated packages use the published SDK dependency:
-
-```json
-"@bakingrl/plugin-sdk": "^1.0.1"
-```
-
-The generated manifest also declares `compatibility.runtimeApi` with the
-current runtime API version, `1.0.0`.
-
-## Create A Package From A Local SDK Checkout
-
-When developing this SDK repository itself, install the checkout globally:
-
-```sh
-cd BakingRLSDK
-npm install
-npm install -g . --force
-```
-
-Create a package in a sibling plugin repository:
-
-```sh
-cd ../BakingRLPlugins
-create-bakingrl-plugin my-package
-cd my-package
-npm install
-```
-
-Generated packages use the SDK from the checkout through a `file:` dependency.
-
-After editing SDK types or runtime helpers:
-
-```sh
-cd ../BakingRLSDK
 npm run build
-```
-
-If you changed the generator, package helper, templates, or global command
-metadata:
-
-```sh
-cd ../BakingRLSDK
-npm install -g . --force
-```
-
-You can also run the generator without global installation:
-
-```sh
-cd BakingRLSDK
-npm run create -- ../BakingRLPlugins/my-package
-```
-
-## Generated Package Layout
-
-The default template includes:
-
-```txt
-bakingrl.plugin.json
-package.json
-vite.config.ts
-src/visuals/scoreboard/index.ts
-src/components/team-badge/index.ts
-src/components/team-badge/props.schema.json
-src/services/match-stats/index.ts
-src/services/match-stats/methods.schema.json
-src/connectors/twitch/index.ts
-scripts/bakingrl-plugin.mjs
-```
-
-The manifest declares the runtime capabilities. `vite.config.ts` controls which
-source entries are built to the `dist/` paths declared in the manifest.
-
-## Build, Validate, Pack, Install
-
-Use this loop for most plugin work:
-
-```sh
-npm run build
-npm run check
 npm run validate
-npm run pack
-npm run install:local
 ```
 
-What each command does:
+The default template creates a trusted v3 package with an extension host entry
+and a webview contribution.
 
-- `build`: bundles every Vite input to `dist/`.
-- `check`: runs TypeScript without emitting files.
-- `validate`: verifies manifest shape and built export entries.
-- `pack`: writes hashes and creates a `.brlp` bundle in `dist-bundles/`.
-- `install:local`: copies the built package into BakingRL's app-data package
-  directory.
+Other templates:
 
-Local package install directories:
+```sh
+create-bakingrl-plugin my-overlay --template overlay-plugin
+create-bakingrl-plugin my-native --template native-sidecar-plugin
+```
 
-- Linux: `$XDG_DATA_HOME/com.quillianne.bakingrl/packages` or
-  `~/.local/share/com.quillianne.bakingrl/packages`
+## Development Loop
+
+1. Edit `src/extension/index.ts`, browser entries, manifest contributions, or
+   sidecar code.
+2. Run `npm run build`.
+3. Run `npm run validate`.
+4. Run `npm run install:local`.
+5. Reload packages in BakingRL or restart the app when testing extension host
+   lifecycle behavior.
+
+## Install Target
+
+The helper installs into the BakingRL package directory:
+
 - macOS: `~/Library/Application Support/com.quillianne.bakingrl/packages`
+- Linux: `$XDG_DATA_HOME/com.quillianne.bakingrl/packages`
 - Windows: `%LOCALAPPDATA%/com.quillianne.bakingrl/packages`
 
 Set `BAKINGRL_PACKAGES_DIR` to override the target during development.
 
 ## Test In BakingRL
 
-1. Start BakingRL with `npm run tauri dev` from the app repository.
-2. Open the Packages tab.
-3. Enable your package.
-4. Add visual exports to an overlay layout or custom page.
-5. Use the package configuration action if the package declares
-   `settings` or `exports.configuration`.
-6. Use editor actions to inspect editor-only visual states without launching
-   Rocket League.
-7. Switch the editor to preview mode when you want the package to use its
-   normal runtime path, including services, registry reads, bus events, and
-   service RPC.
+1. Start BakingRL from the host repository.
+2. Open the Packages or Developer area.
+3. Enable the package.
+4. Open contributed pages, webviews, or overlays.
+5. Add contributed visuals to an overlay/editor layout.
+6. Use diagnostics, logs, and runtime restart controls when testing crashes or
+   activation behavior.
 
 ## Next Steps
 
-- Use [Plugin Capabilities](plugin-capabilities.qd) for the complete list of
-  exports, imports, permissions, editor surfaces, and packaging capabilities.
-- Use [Plugin Best Practices](plugin-best-practices.qd) for guidance on visual
-  versus service state, editor actions, preview runtime, permissions, and
-  secrets.
-- Use [Fullstack Plugin Tutorial](fullstack-plugin-tutorial.qd) for a guided
-  package that combines a visual, service, editor actions, and runtime preview.
-- Use [Authoring Workflows](authoring-workflows.qd) for TypeScript examples,
-  separate HTML/CSS files, services, components, and settings.
-- Use [SDK API](sdk-api.qd) for the complete SDK helper and context reference.
-- Use [Package CLI](package-cli.qd) for every generator and helper command.
-- Use [Plugin Package Format](plugin-package-format.qd) for manifest exports,
-  settings schemas, page templates, layout templates, and bundle contents.
+- [Plugin Capabilities](plugin-capabilities.qd)
+- [Authoring Workflows](authoring-workflows.qd)
+- [SDK API](sdk-api.qd)
+- [Package CLI](package-cli.qd)
+- [Plugin Package Format](plugin-package-format.qd)

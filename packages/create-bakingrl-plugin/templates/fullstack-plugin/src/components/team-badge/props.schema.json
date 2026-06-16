@@ -1,9 +1,0 @@
-{
-  "type": "object",
-  "properties": {
-    "teamName": { "type": "string" },
-    "color": { "type": "string" },
-    "score": { "type": "number" }
-  },
-  "required": ["teamName"]
-}

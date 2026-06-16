@@ -30,14 +30,14 @@ npm run pack
 ## Helper CLI
 
 Generated packages include `scripts/bakingrl-plugin.mjs`, but the global
-`bakingrl-plugin` command can also validate, diagnose, migrate v2 manifests,
-pack, inspect, sign, and install plugin packages during development.
+`bakingrl-plugin` command can also validate, diagnose, pack, inspect, sign,
+and install trusted v3 plugin packages during development.
 
 New packages declare `compatibility.runtimeApi` with the current BakingRL
 runtime API (`1.0.0`). The helper refuses to validate packages that omit it or
 target outside `>=1.0.0 <2.0.0`.
 
-The current template can be extended with visuals, components, services, and
-connectors through `npm run add -- <type> <name>`. Package-level `settings`
-schemas render host-owned settings forms, and `exports.configuration` is
-available when a plugin needs a private fixed-size custom configuration page.
+Current templates are `extension-plugin`, `overlay-plugin`, and
+`native-sidecar-plugin`. Package-level `settings` schemas render host-owned
+settings forms, and custom UI is declared through `contributes.webviews`,
+`contributes.pages`, or `contributes.overlays`.

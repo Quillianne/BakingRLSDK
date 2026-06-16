@@ -24,24 +24,20 @@ The current SDK version is `1.0.1`. Generated packages declare runtime API
 - [Plugin Best Practices](chapters/plugin-best-practices.qd): guidance for
   choosing capabilities, data flow, editor states, preview, permissions, and
   packaging.
-- [Fullstack Plugin Tutorial](chapters/fullstack-plugin-tutorial.qd): a
-  guided package that combines a visual, service, editor actions, runtime
-  preview, permissions, and local installation.
-- [Authoring Workflows](chapters/authoring-workflows.qd): common plugin
-  authoring patterns with TypeScript, services, components, and separate
-  HTML/CSS files.
+- [Authoring Workflows](chapters/authoring-workflows.qd): extension host,
+  visual, webview, overlay, service, and sidecar authoring patterns.
 - [SDK API](chapters/sdk-api.qd): TypeScript helpers and runtime contexts.
-- [Plugin Package Format](chapters/plugin-package-format.qd): manifest schema,
-  export types, and bundle structure.
+- [Plugin Package Format](chapters/plugin-package-format.qd): manifest v3
+  schema, contribution maps, sidecars, and bundle structure.
 - [Package CLI](chapters/package-cli.qd): generator and package helper commands.
-- [Security Model](chapters/security-model.qd): host-enforced permissions and
-  package boundaries.
+- [Security Model](chapters/security-model.qd): trusted plugin operations,
+  diagnostics, safe mode, and package boundaries.
 - [Telemetry Types](chapters/telemetry-types.qd): Rocket League event names and
   typed payloads.
 
 ## Source Of Truth
 
 The SDK owns plugin authoring contracts, templates, helper CLI behavior, and
-manifest type definitions. The host application owns runtime enforcement,
-package installation, permission checks, page rendering, overlays, and OBS
-gateway behavior.
+manifest type definitions. The host application owns runtime supervision,
+package installation, runtime checks, page rendering, overlays, and OBS gateway
+behavior.

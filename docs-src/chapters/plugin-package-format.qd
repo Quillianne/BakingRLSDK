@@ -3,146 +3,10 @@
 .include {docs}
 .doclang {en}
 
-BakingRL packages are described by `bakingrl.plugin.json`.
+BakingRL packages are described by `bakingrl.plugin.json`. Current packages use
+`schema: "bakingrl.plugin/3"` and `kind: "trusted"`.
 
-Use `bakingrl.plugin/2` for untrusted packages that expose visuals,
-components, services, connectors, pages, and layouts through `exports`.
-
-Use `bakingrl.plugin/3` for trusted extension packages. A v3 package declares
-`kind: "trusted"`, an extension host entry, activation events, contributed UI,
-sidecars, and requested host capabilities.
-
-## Minimal Manifest
-
-```json
-{
-  "schema": "bakingrl.plugin/2",
-  "id": "com.example.my-package",
-  "name": "My Package",
-  "version": "1.0.0",
-  "compatibility": {
-    "runtimeApi": "1.0.0",
-    "sdk": "1.0.1"
-  },
-  "exports": {
-    "visuals": {
-      "scoreboard": {
-        "entry": "dist/visuals/scoreboard.js",
-        "defaultSize": [760, 128],
-        "settings": "schemas/scoreboard-settings.json"
-      }
-    },
-    "layouts": {
-      "stream": {
-        "path": "templates/stream-layout.json",
-        "title": "Stream Layout"
-      }
-    }
-  }
-}
-```
-
-## Export Types
-
-- `exports.visuals`: browser ESM modules mounted in overlays and pages.
-- `exports.components`: reusable visual components loaded by visuals.
-- `exports.services`: sandboxed backend modules with callable methods.
-- `exports.connectors`: backend modules with explicit network permissions.
-- `exports.assets`: package-owned static assets.
-- `exports.schemas`: package-owned schema files.
-- `exports.pages`: importable page templates.
-- `exports.layouts`: importable overlay layout templates.
-- `exports.configuration`: private fixed-size plugin configuration page.
-
-Use [Plugin Capabilities](plugin-capabilities.qd) for the behavior and intended
-use of each capability.
-
-## Top-Level Fields
-
-`schema`
-
-Must be `bakingrl.plugin/2` or `bakingrl.plugin/3`.
-
-`id`
-
-Stable package identity. Use a reverse-DNS style value such as
-`com.example.scoreboard`. Do not use the reserved `plugin.` runtime prefix.
-
-`name`
-
-Human-readable package name.
-
-`version`
-
-Package version. Use semantic versions so the host and future marketplace can
-compare updates predictably.
-
-`compatibility`
-
-Runtime compatibility declaration. `runtimeApi` is required; `sdk` is optional
-but recommended for diagnostics.
-
-`exports`
-
-Capabilities provided by a v2 package. A v2 package must export at least one
-capability.
-
-`kind`
-
-Required for v3 packages. Current trusted extension packages use
-`kind: "trusted"`.
-
-`runtime`
-
-Required for v3 packages. `runtime.extensionHost.entry` points to the built ESM
-entry loaded by the host extension runtime. `runtime.sidecars` is an object map
-of packaged helper processes.
-
-`activation`
-
-Required for v3 packages. `activation.events` is a non-empty list of host
-events that can start the extension, such as `onStartup`.
-
-`contributes`
-
-Required object for v3 packages. It contains object maps for `commands`,
-`services`, `visuals`, `views`, `pages`, `overlays`, `webviews`,
-`configuration`, `assets`, and `schemas`. Maps can be empty, but the keys are
-part of the public v3 shape.
-
-`capabilities`
-
-Required object for v3 packages. Host-mediated permissions live under
-`capabilities.permissions`.
-
-`imports`
-
-Optional package references consumed by this package. Current fields are
-`components` and `services`.
-
-`permissions`
-
-Optional host-enforced permissions for bus events, registry keys, network
-hosts, and storage paths.
-
-`settings`
-
-Optional package-level settings JSON Schema path. BakingRL uses it to render a
-host-owned package configuration form when no custom `exports.configuration`
-page is declared.
-
-## Runtime Compatibility
-
-`compatibility.runtimeApi` is required for packages targeting current BakingRL
-hosts. The SDK scaffolder initializes it with the current runtime API version.
-
-Current host support is `>=1.0.0 <2.0.0`. Packages outside that range can still
-be installed for inspection, but the host disables them and refuses activation
-until they are rebuilt for a compatible runtime API.
-
-## Trusted Extension Manifest V3
-
-Minimal v3 package:
+## Minimal Trusted V3 Manifest
 
 ```json
 {
@@ -171,12 +35,7 @@ Minimal v3 package:
     "views": {},
     "pages": {},
     "overlays": {},
-    "webviews": {
-      "home": {
-        "title": "Example Extension",
-        "entry": "dist/webviews/home.js"
-      }
-    },
+    "webviews": {},
     "configuration": {},
     "assets": {},
     "schemas": {}
@@ -189,7 +48,7 @@ Minimal v3 package:
       },
       "registry": {
         "read": [],
-        "write": []
+        "write": ["plugin.com.example.extension.*"]
       },
       "network": {
         "http": [],
@@ -204,101 +63,154 @@ Minimal v3 package:
 }
 ```
 
-Extension host code runs through the host trusted-extension runtime, not the v2
-visual/service/connector loaders. Keep the entry as a built ESM file inside the
-package.
+## Top-Level Fields
 
-Webviews are contributed UI surfaces declared in `contributes.webviews`. They
-are separate browser entries and should be built into `dist/`.
+`schema`
 
-Sidecars are packaged helper processes declared in `runtime.sidecars`. Each
-sidecar map entry has this shape:
+Must be `bakingrl.plugin/3` for current packages.
 
-```json
-{
-  "command": "sidecars/native-helper/target/release/native-helper",
-  "args": [],
-  "env": {},
-  "platforms": ["darwin", "linux"],
-  "protocol": "jsonrpc-stdio",
-  "activation": "onActivation"
-}
+`kind`
+
+Must be `trusted`.
+
+`id`
+
+Stable package identity. Use reverse-DNS style values such as
+`com.example.scoreboard`. Do not use the reserved `plugin.` runtime prefix.
+
+`compatibility`
+
+Runtime compatibility declaration. `runtimeApi` is required and currently
+targets `1.0.0`. `sdk` should record the helper package version used to build
+the package.
+
+`runtime`
+
+Declares executable runtime entries. `runtime.extensionHost.entry` is the built
+ESM file loaded by the Node extension host. `runtime.sidecars` is an object map
+of package-local helper processes.
+
+`activation`
+
+Declares events that can start the extension host, such as `onStartup`.
+
+`contributes`
+
+Declarative package surface used for discovery, descriptors, runtime startup,
+and UI.
+
+`capabilities`
+
+Visible capability metadata and lightweight host guard declarations. Detailed
+bus, registry, network, and storage scopes live under
+`capabilities.permissions`.
+
+`settings`
+
+Optional package-level JSON Schema path for non-secret settings and secret
+metadata.
+
+## Contributes
+
+`contributes` contains maps for:
+
+- `commands`: command IDs and display metadata;
+- `services`: service metadata and method schemas;
+- `visuals`: browser entries mounted by host pages and overlays;
+- `views`: future host-owned view surfaces;
+- `pages`: page templates or page browser entries;
+- `overlays`: overlay templates or overlay browser entries;
+- `webviews`: plugin-authored browser panels;
+- `configuration`: configuration UI and schema metadata;
+- `assets`: static files;
+- `schemas`: package-owned schemas.
+
+Services are discovered from the manifest, but live implementations are
+registered from extension host code:
+
+```ts
+context.services.register("state", {
+  snapshot() {
+    return currentState;
+  }
+});
 ```
 
-`command` is a package-relative executable path. `protocol` is currently
-`jsonrpc-stdio`. `activation` is `manual`, `onActivation`, or `onStartup`.
-The helper CLI validates declared sidecar commands stay inside the package and
-exist after the package is built.
+## Extension Host
 
-## Visual Instance Settings
+The extension host entry exports `activate(context)` and optionally
+`deactivate()`:
 
-`exports.visuals.<name>.settings` can point to a JSON Schema file. BakingRL uses
-that schema to render typed instance settings in the page and layout editors,
-instead of forcing users to edit raw JSON.
+```ts
+import { defineExtension } from "@bakingrl/plugin-sdk";
 
-Settings schemas should be JSON Schema objects with `properties`. Use
-`title`, `description`, `default`, `required`, numeric/string bounds, and
-primitive option lists to make the generated editor form readable.
+export const { activate, deactivate } = defineExtension({
+  async activate(context) {
+    context.logger.info("extension activated");
+  },
+  async deactivate() {}
+});
+```
 
-Supported field shapes in the current host UI:
+The runtime context includes commands, services, bus, registry, storage,
+settings, secrets metadata, webviews, overlays, sidecars, telemetry,
+diagnostics, and logger APIs.
 
-- `type: "string"`, including `format: "color"`;
-- `type: "number"` or `type: "integer"`;
-- `type: "boolean"`;
-- `enum`, `oneOf`, or `anyOf` options with primitive values;
-- `type: "array"` with primitive options declared on `items`.
+## Bus And Registry Namespaces
+
+Package-owned state should use:
+
+```txt
+plugin.<package-id>.*
+```
+
+Examples:
+
+```txt
+plugin.com.example.scoreboard.state
+plugin.com.example.scoreboard.sequence
+```
+
+Declare cross-package reads explicitly in `capabilities.permissions.bus.read`
+or `capabilities.permissions.registry.read`.
+
+## Sidecars
+
+Sidecars are declared as an object map:
 
 ```json
 {
-  "type": "object",
-  "title": "Scoreboard Settings",
-  "properties": {
-    "accent": {
-      "type": "string",
-      "format": "color",
-      "default": "#38bdf8"
-    },
-    "showBoost": {
-      "type": "boolean",
-      "default": true
-    },
-    "density": {
-      "type": "string",
-      "default": "comfortable",
-      "oneOf": [
-        { "const": "compact", "title": "Compact" },
-        { "const": "comfortable", "title": "Comfortable" }
-      ]
+  "runtime": {
+    "sidecars": {
+      "native-helper": {
+        "command": "sidecars/native-helper/target/release/native-helper",
+        "args": [],
+        "env": {},
+        "platforms": ["darwin", "linux"],
+        "protocol": "jsonrpc-stdio",
+        "activation": "onActivation"
+      }
     }
   }
 }
 ```
 
-## Package Settings And Secrets
+`command` is package-relative. `protocol` is currently `jsonrpc-stdio`.
+Activation can be `manual`, `onActivation`, or `onStartup`.
 
-Package-level `settings` schemas use the same supported JSON Schema field
-shapes as visual instance settings. Non-sensitive values are stored in
-BakingRL's package settings file, merged with schema defaults, and exposed to
-visuals, services, and connectors through `context.settings`.
+## Settings And Secrets
+
+Package-level `settings` points to a JSON Schema. Non-sensitive values are
+exposed through `context.settings`.
 
 Secret fields must be string properties with `x-bakingrl-secret: true`.
-Secrets must not declare defaults. BakingRL stores them in the OS keychain,
-never includes them in `context.settings`, and only exposes them to connectors
-through `context.secrets`.
-`context.secrets.configured(key)` uses a non-secret configured flag managed by
-the host. `context.secrets.get(key)` reads the keychain on first access and then
-uses an in-memory host cache until the app exits.
-
-```json
-{
-  "settings": "src/settings.schema.json"
-}
-```
+Secrets must not declare defaults. BakingRL stores them outside the package
+bundle and never writes secret values to settings JSON.
 
 ```json
 {
   "type": "object",
-  "title": "Connector Settings",
+  "title": "Package Settings",
   "properties": {
     "apiBaseUrl": {
       "type": "string",
@@ -313,104 +225,12 @@ uses an in-memory host cache until the app exits.
 }
 ```
 
-## Page Templates
+## Bundle Layout
 
-`exports.pages` contains templates for host-owned page layouts. Importing a
-template does not create a plugin-owned route or window. BakingRL assigns fresh
-IDs and timestamps, tracks template provenance, and then lets users edit the
-page like any other page.
-
-## Layout Templates
-
-`exports.layouts` contains templates for overlay layouts. A template is
-imported into BakingRL's host-owned layout list; it does not create an overlay
-runtime by itself. Users can then route the imported layout to the in-game
-overlay or OBS stream output.
-
-Layout template IDs, layer IDs, item IDs, timestamps, and template provenance
-may be rewritten during import. Keep portable behavior in package/export
-references and item settings rather than relying on template IDs.
-
-## Configuration Page
-
-`exports.configuration` declares one private page opened from the package
-configuration action. It is not listed as a user-importable page template, and
-its visuals are not available in the normal visual picker.
-
-The host forces the configuration canvas to `1200x740`, regardless of the page
-file dimensions.
-
-```json
-{
-  "exports": {
-    "configuration": {
-      "path": "pages/configuration.json",
-      "title": "Package Settings",
-      "visuals": {
-        "settingsPanel": {
-          "entry": "dist/configuration/settings-panel.js",
-          "defaultSize": [1200, 740]
-        }
-      }
-    }
-  }
-}
-```
-
-Configuration visuals are private to that page. Do not reference them from
-normal pages, overlays, or public layout templates. If the package also
-declares secret settings, BakingRL renders those secret fields in host-owned UI
-next to the custom page so plugin frontend code cannot read the submitted
-values.
-
-## Imports And Permissions
-
-Imports declare package capabilities this package expects to consume:
-
-```json
-{
-  "imports": {
-    "components": ["com.example.ui/TeamBadge"],
-    "services": ["com.example.stats/matchStats"]
-  }
-}
-```
-
-Permissions declare host-mediated capabilities:
-
-```json
-{
-  "permissions": {
-    "bus": {
-      "read": ["UpdateState", "GoalScored"],
-      "publish": ["plugin.com.example.scoreboard.*"]
-    },
-    "registry": {
-      "read": ["plugin.com.example.scoreboard.*"],
-      "write": ["plugin.com.example.scoreboard.*"]
-    },
-    "network": {
-      "http": ["api.example.com"],
-      "websocket": ["stream.example.com"]
-    },
-    "storage": ["plugin://self/*"]
-  }
-}
-```
-
-The SDK can type these fields, but the host is the enforcement boundary.
-
-## Distribution Bundle
-
-The `.brlp` format is a ZIP archive. Required:
+Typical package contents:
 
 ```txt
 bakingrl.plugin.json
-```
-
-Supported:
-
-```txt
 dist/
 assets/
 schemas/
@@ -419,7 +239,13 @@ manifest.hashes.json
 signature.ed25519
 ```
 
-The helper CLI can generate hashes, signatures, and `.brlp` archives.
+Do not include source caches, signing keys, private keys, `.env` files,
+secrets, or local machine files in a bundle.
+
+## `.brlp` Archives
+
+`.brlp` files are package ZIP archives. The helper CLI can generate hashes,
+signatures, and archives:
 
 ```sh
 npm run pack
@@ -427,40 +253,6 @@ npm run keygen -- signing-key.json
 npm run pack -- --sign signing-key.json
 ```
 
-## Marketplace Listing
-
-Packages that want to appear in BakingRL Marketplace should include:
-
-```txt
-marketplace/listing.json
-```
-
-The listing is package-owned display metadata:
-
-```json
-{
-  "schema": "bakingrl.plugin-listing/1",
-  "packageId": "com.example.scoreboard",
-  "displayName": "Scoreboard",
-  "shortDescription": "Compact live scoreboard overlay.",
-  "longDescription": "Markdown description shown in the marketplace detail view.",
-  "tags": ["overlay", "telemetry"],
-  "repo": "https://github.com/example/scoreboard",
-  "iconUrl": "https://raw.githubusercontent.com/example/scoreboard/main/marketplace/icon.png",
-  "bannerUrl": "https://raw.githubusercontent.com/example/scoreboard/main/marketplace/banner.png",
-  "screenshots": [],
-  "links": {
-    "docs": "https://github.com/example/scoreboard#readme",
-    "support": "https://github.com/example/scoreboard/issues"
-  }
-}
-```
-
-Listing text and images are not execution trust. Marketplace trust is granted
-only by the signed marketplace index for approved package versions, using the
-reviewed bundle SHA-256, signature public key, and effective permissions.
-
-## Versioning
-
-Use semantic versions in package manifests. BakingRL treats package IDs as
-stable identities, so avoid changing an ID after publishing.
+The host inspects archives before installation and should reject unsafe paths,
+unsupported schemas, runtime-incompatible packages, hash mismatches, and
+invalid signatures.

@@ -3,12 +3,13 @@
 .include {docs}
 .doclang {en}
 
-The SDK package is `@bakingrl/plugin-sdk`. It contains TypeScript contracts,
-definition helpers, telemetry fixtures, and small test utilities for BakingRL
-plugin packages.
+The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v3 plugin
+contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/3`,
+SDK `1.0.1`, runtime API `1.0.0`.
 
-Runtime permissions are enforced by the BakingRL host. The SDK improves typing
-and authoring ergonomics, but it is not a security boundary.
+The SDK is an authoring contract. Runtime behavior is provided by the host:
+package loading, extension host supervision, bridge calls, service routing,
+sidecars, storage, secrets, diagnostics, overlays, and OBS rendering.
 
 ## Import Surface
 
@@ -18,649 +19,147 @@ import {
   RUNTIME_API_VERSION,
   SUPPORTED_RUNTIME_API_RANGE,
   currentCompatibility,
+  defineExtension,
   defineVisual,
-  defineComponent,
-  defineService,
-  defineConnector,
-  setting,
   createCleanup,
   createMockVisualContext,
-  createMockServiceContext,
-  createMockConnectorContext
+  createWebviewBridge,
+  type ExtensionContext,
+  type PluginManifestV3,
+  type VisualContext,
+  type WebviewBridge
 } from "@bakingrl/plugin-sdk";
 ```
 
-The root module also re-exports all telemetry names, payload types, fixtures,
-and mock event helpers from the telemetry module.
+The root module also re-exports Rocket League telemetry event names and payload
+types from `@bakingrl/plugin-sdk/telemetry`.
 
-`SDK_VERSION` is the SDK helper version. `RUNTIME_API_VERSION` is the host
-contract version that generated manifests should declare.
-`SUPPORTED_RUNTIME_API_RANGE` is the host compatibility range represented by
-this SDK release. In this release, `SDK_VERSION` is `1.0.1`,
-`RUNTIME_API_VERSION` is `1.0.0`, and `SUPPORTED_RUNTIME_API_RANGE` is
-`>=1.0.0 <2.0.0`.
+## Extension Host
 
-## JSON Utility Types
+Each trusted plugin declares one JavaScript extension entry:
 
-`JsonPrimitive` represents `string`, `number`, `boolean`, or `null`.
-
-`JsonValue` represents a JSON-compatible primitive, array, or object.
-
-`CleanupFn` is a function with no arguments and no return value. Mount methods
-can return a cleanup function to detach listeners, timers, observers, or DOM
-state created by the export.
-
-## Definition Helpers
-
-Definition helpers return the object they receive, but constrain it with the
-right SDK type. Use them on every exported module so TypeScript catches missing
-or misspelled lifecycle methods.
-
-`definePlugin(definition)`
-
-Types a package-level definition object:
-
-```ts
-import { definePlugin } from "@bakingrl/plugin-sdk";
-
-export default definePlugin({
-  id: "com.example.scoreboard",
-  name: "Scoreboard",
-  version: "1.0.0",
-  visuals: {
-    scoreboard: () => import("./visuals/scoreboard")
+```json
+{
+  "runtime": {
+    "extensionHost": {
+      "entry": "dist/extension/index.js"
+    },
+    "sidecars": {}
   }
-});
+}
 ```
 
-The current generated package format uses `bakingrl.plugin.json` as the source
-of truth for exports, so most plugin authors only need the per-capability
-helpers below.
+The module exports `activate(context)` and may export `deactivate()`:
 
-`PluginDefinition` fields:
+```ts
+import { defineExtension, type ExtensionContext } from "@bakingrl/plugin-sdk";
 
-- `id`: package ID.
-- `name`: display name.
-- `version`: package version.
-- `visuals`: optional record of lazy ESM import functions.
-- `components`: optional record of lazy ESM import functions.
-- `services`: optional record of lazy ESM import functions.
-- `connectors`: optional record of lazy ESM import functions.
+const extension = defineExtension({
+  async activate(context: ExtensionContext) {
+    context.logger.info("activated");
+    context.services.register("echo", {
+      ping(input) {
+        return { ok: true, input };
+      }
+    });
+  },
+  async deactivate() {}
+});
 
-`defineVisual(visual)`
+export const activate = extension.activate;
+export const deactivate = extension.deactivate;
+```
 
-Types a visual export. Visuals render into a host-owned browser DOM root and
-can subscribe to telemetry, load components, call services, and resolve package
-assets.
+`ExtensionContext` exposes:
+
+- `commands.registerCommand` and `commands.executeCommand`;
+- `services.register`, `services.registerService`, and `services.call`;
+- `bus.subscribe` and `bus.emit`;
+- `registry.get`, `registry.set`, and `registry.entries`;
+- `storage.readText` and `storage.writeText`;
+- `secrets.get` and `secrets.configured`;
+- `webviews.open`, `webviews.close`, and declared webview metadata;
+- `overlays.list` and `overlays.refresh`;
+- `sidecars.start`, `sidecars.stop`, `sidecars.restart`, and `sidecars.call`;
+- `telemetry.event`;
+- `diagnostics` and `logger`.
+
+Services are registered from `activate(context)`. The manifest only declares
+service names, methods, schemas, and optional sidecar links so the host can
+inspect packages before executing them.
+
+## Visuals
+
+Browser visuals are declared through `contributes.visuals` and implemented with
+`defineVisual`:
 
 ```ts
 import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
 
 export default defineVisual({
   mount(context: VisualContext) {
-    context.root.textContent = "Waiting for match data";
-
-    return context.bus.subscribe("GoalScored", (event) => {
-      context.root.textContent = `${event.Data.Scorer.Name} scored`;
-    });
-  }
-});
-```
-
-Visuals can also expose an optional editor contract for BakingRL's layout/page
-editor. This contract is local to the editor canvas and is not published to the
-host bus:
-
-```ts
-export default defineVisual({
-  mount(context: VisualContext) {
-    context.root.textContent = "Waiting";
-
-    return context.bus.subscribe("GoalScored", (event) => {
-      context.root.textContent = `${event.Data.Scorer.Name} scored`;
-    });
+    context.root.textContent = "Hello BakingRL";
+  },
+  update(context: VisualContext) {
+    context.root.style.opacity = String(context.item.opacity);
   },
   editor: {
     mount(context: VisualContext) {
-      context.editor?.emit("GoalScored", {
-        Scorer: { Name: "Editor Player", TeamNum: 0 },
-        GoalSpeed: 100,
-        GoalTime: 120,
-        ImpactLocation: { X: 0, Y: 0, Z: 0 },
-        BallLastTouch: {
-          Player: { Name: "Editor Player", TeamNum: 0 },
-          Speed: 100
-        }
-      });
-    },
-    actions() {
-      return [
-        {
-          id: "goal",
-          label: "Goal",
-          run(context: VisualContext) {
-            context.editor?.emit("GoalScored", {
-              Scorer: { Name: "Editor Player", TeamNum: 0 },
-              GoalSpeed: 100,
-              GoalTime: 120,
-              ImpactLocation: { X: 0, Y: 0, Z: 0 },
-              BallLastTouch: {
-                Player: { Name: "Editor Player", TeamNum: 0 },
-                Speed: 100
-              }
-            });
-          }
-        }
-      ];
+      context.root.textContent = "Editor preview";
     }
   }
 });
 ```
 
-`context.mode` is `"editor"` inside the editor canvas and `"runtime"` for
-normal overlay/page rendering. `context.editor` only exists in editor mode.
-Editor events are delivered through the visual's normal `context.bus`
-subscriptions, but they stay local to the editor renderer.
+`VisualContext` contains the DOM root, package metadata, the overlay/editor
+item rectangle, visual settings, editor mode, bus subscription, registry reads,
+service calls, asset URL resolution, and diagnostics.
 
-`defineComponent(component)`
+## Webviews
 
-Types a reusable visual component. Components are mounted by visuals through
-`context.components.load(ref)` rather than direct package imports.
-
-```ts
-import { defineComponent, type ComponentContext } from "@bakingrl/plugin-sdk";
-
-export default defineComponent({
-  mount(context: ComponentContext, props: Record<string, unknown>) {
-    context.root.textContent = String(props.label ?? "");
-  }
-});
-```
-
-`defineService(service)`
-
-Types a backend service export. Services can subscribe to backend events, write
-permitted registry keys, read and write permitted storage URIs, and expose
-callable methods.
+Pages, overlays, views, and custom webviews are browser assets declared through
+`contributes.pages`, `contributes.overlays`, `contributes.views`, or
+`contributes.webviews`. They communicate with the host through `postMessage`.
 
 ```ts
-import { defineService } from "@bakingrl/plugin-sdk";
+import { createWebviewBridge } from "@bakingrl/plugin-sdk";
 
-let lastGoal: unknown = null;
-
-export default defineService({
-  methods: {
-    snapshot() {
-      return { lastGoal };
-    },
-    reset() {
-      lastGoal = null;
-      return { ok: true };
-    }
-  }
-});
-```
-
-`defineConnector(connector)`
-
-Types a backend connector export. Connectors receive the service APIs plus
-host-mediated HTTP and WebSocket access. Network hosts must be declared in the
-manifest permissions.
-
-```ts
-import { defineConnector, type ConnectorContext } from "@bakingrl/plugin-sdk";
-
-export default defineConnector({
-  async mount(context: ConnectorContext) {
-    context.diagnostics.log("connector ready");
-  }
-});
-```
-
-## Lifecycle Contracts
-
-`VisualExport`
-
-- `mount(context)`: required. Called when the visual instance is created.
-- `update(context)`: optional. Called when the host updates instance metadata
-  or settings without remounting.
-- `unmount()`: optional. Called before the visual instance is destroyed.
-- `editor.mount(context)`: optional editor-only setup for representative visual
-  states.
-- `editor.actions(context)`: optional editor-only actions shown by the host
-  editor.
-
-`mount` can return `void`, `CleanupFn`, `Promise<void>`, or
-`Promise<CleanupFn>`.
-
-Implement `update(context)` for any visual whose rendered output depends on
-`context.settings`, `context.item`, package settings, or other host-provided
-metadata. BakingRL calls `update` when the editor changes instance settings or
-layout metadata. If a visual does not expose `update`, the host may remount it
-as a compatibility fallback, but plugin authors should not rely on remounting
-as the normal refresh path because it can reset local state, timers,
-subscriptions, and in-progress animations.
-
-Use `mount` for one-time setup: initial DOM creation, event subscriptions,
-timers, `ResizeObserver`s, and cleanup registration. Use `update` for applying
-new settings and metadata to the already-mounted instance. Keep the latest
-telemetry or service state in instance-local variables so `update` can rerender
-immediately without waiting for the next telemetry event.
-
-`ComponentExport`
-
-- `mount(context, props)`: required. Called when a visual mounts the component.
-
-Components are owned by the visual that loaded them. Return a cleanup function
-from `mount` if the component needs to detach listeners or timers.
-
-`ServiceExport`
-
-- `mount(context)`: optional. Called when the backend service starts.
-- `unmount()`: optional. Called before the service stops.
-- `methods`: optional object of callable RPC methods.
-
-Each service method receives `(input, context)` and can return a value or a
-promise. Inputs and outputs should be JSON-compatible because they cross a
-host-mediated RPC boundary.
-
-`ConnectorExport`
-
-- `mount(context)`: optional. Called when the backend connector starts.
-- `unmount()`: optional. Called before the connector stops.
-
-Connectors do not define service RPC methods in the current SDK contract. Use a
-service export when other plugin code needs callable methods.
-
-## Manifest Types
-
-The SDK exports TypeScript types for `bakingrl.plugin.json`:
-
-- `PluginManifest`
-- `PluginManifestV3`
-- `PluginManifestV3Activation`
-- `PluginManifestV3Contributes`
-- `PluginManifestV3Capabilities`
-- `ManifestCompatibility`
-- `ManifestVisualExport`
-- `ManifestComponentExport`
-- `ManifestServiceExport`
-- `ManifestConnectorExport`
-- `ManifestTemplateExport`
-- `ManifestConfigurationExport`
-- `RuntimeDeclaration`
-- `RuntimeSidecar`
-
-Use `currentCompatibility()` when generating manifests from tools or tests:
-
-```ts
-import { currentCompatibility } from "@bakingrl/plugin-sdk";
-
-const compatibility = currentCompatibility();
-```
-
-It returns the current `runtimeApi` and `sdk` versions for this SDK release.
-
-Manifest v3 contribution fields are maps keyed by contribution name:
-`commands`, `services`, `visuals`, `views`, `pages`, `overlays`, `webviews`,
-`configuration`, `assets`, and `schemas`. `runtime.sidecars` is also a map,
-where each sidecar declares `command`, optional `args`, optional `env`,
-optional `platforms`, `protocol: "jsonrpc-stdio"`, and activation mode
-`manual`, `onActivation`, or `onStartup`.
-
-## Visual Context
-
-Visuals receive `VisualContext`:
-
-- `root`: the `HTMLElement` owned by this visual instance.
-- `package`: package descriptor with `id`, `name`, and `enabled`.
-- `exportName`: visual export name from `bakingrl.plugin.json`.
-- `item`: layout or page instance metadata.
-- `settings`: merged package and item settings.
-- `mode`: `"runtime"` for normal rendering or `"editor"` inside the host
-  editor canvas.
-- `editor`: editor-only helper API, present only when `mode` is `"editor"`.
-- `setActive(active)`: informs the host that the visual wants event-layer
-  activity enabled or disabled.
-- `bus`: telemetry subscription API.
-- `registry`: read-only registry API.
-- `components`: component loading API.
-- `services`: service RPC API.
-- `assets`: package asset URL resolver.
-- `diagnostics`: structured logging API.
-
-`item` contains:
-
-- `id`, `package_id`, `export_name`, and `name`;
-- position fields `x`, `y`, `width`, `height`, and `z_index`;
-- state fields `visible`, `locked`, and `opacity`;
-- instance `settings`.
-
-Example:
-
-```ts
-import { defineVisual, setting, type VisualContext } from "@bakingrl/plugin-sdk";
-
-type Instance = {
-  accent: string;
-};
-
-const instances = new Map<HTMLElement, Instance>();
-
-function render(context: VisualContext, instance: Instance) {
-  context.root.style.opacity = String(context.item.opacity);
-  context.root.style.setProperty("--accent", instance.accent);
-}
-
-export default defineVisual({
-  mount(context: VisualContext) {
-    const instance = {
-      accent: setting(context.settings, "accent", "#38bdf8")
-    };
-    instances.set(context.root, instance);
-    render(context, instance);
-    return () => instances.delete(context.root);
+const bridge = createWebviewBridge({
+  postMessage(message) {
+    window.parent.postMessage(message, "*");
   },
-  update(context) {
-    const instance = instances.get(context.root);
-    if (!instance) return;
-    instance.accent = setting(context.settings, "accent", "#38bdf8");
-    render(context, instance);
+  onMessage(handler) {
+    const listener = (event: MessageEvent) => handler(event.data);
+    window.addEventListener("message", listener);
+    return { dispose: () => window.removeEventListener("message", listener) };
   }
 });
 ```
 
-## Visual Sizing
+The host owns windowing and OBS routes. Plugin webviews should stay portable and
+only depend on the bridge and packaged assets.
 
-The host owns the visual instance rectangle. `context.root` already has the
-position and size declared by the page or layout editor. Render inside
-`context.root`; do not write layout code that assumes a fixed viewport, mutates
-the parent editor frame, or positions outside the root.
+## Sidecars
 
-Use the manifest `defaultSize` as the first placement size and design your
-visual for that box. For fixed-design broadcast widgets, use a root-local scale
-strategy based on `ResizeObserver`: keep an inner design surface at a known
-width and height, then scale it to fit `context.root`. Recalculate that scale
-when the root size changes and clean up the observer from `mount`.
-
-Sizing best practices:
-
-- Use `width: 100%` and `height: 100%` on the visual root content.
-- Keep overflow intentional; prefer `overflow: hidden` for framed widgets.
-- Use `context.item.width` and `context.item.height` only as metadata; the DOM
-  size source of truth is `context.root`.
-- Do not wait for remount to respond to size-sensitive settings. Store the
-  current settings and rerender from `update(context)`.
-- Return cleanup functions for `ResizeObserver`, intervals, animation timers,
-  and bus subscriptions.
-
-## Component Context
-
-Components receive `ComponentContext`:
-
-- `root`: the `HTMLElement` owned by this component instance.
-- `providerPackageId`: package ID that provides the component.
-- `exportName`: component export name from the provider manifest.
-- `assets`: provider package asset URL resolver.
-- `diagnostics`: structured logging API.
-
-Components should render only inside `root` and should treat `props` as
-untrusted input.
-
-## Service Context
-
-Services receive `ServiceContext`:
-
-- `bus`: backend event API with subscribe and emit.
-- `registry`: permitted registry read/write API.
-- `storage`: permitted text storage API.
-- `services`: service RPC API for permitted service imports.
-- `settings`: package settings reader.
-- `diagnostics`: structured logging API.
-
-Example:
+Native code is not loaded into the Tauri process. Rust or other native helpers
+are package-local sidecar binaries declared in `runtime.sidecars` and controlled
+from `context.sidecars`.
 
 ```ts
-import { defineService, type ServiceContext } from "@bakingrl/plugin-sdk";
-
-export default defineService({
-  mount(context: ServiceContext) {
-    return context.bus.subscribe("UpdateState", (event) => {
-      context.registry.set("plugin.com.example.scoreboard.state", event.Data);
-    });
-  }
+const result = await context.sidecars.call("nativeHelper", "ping", {
+  value: 42
 });
 ```
 
-## Connector Context
+The current protocol is JSON-RPC 2.0 over newline-delimited stdio.
 
-`ConnectorContext` extends `ServiceContext` with host-mediated network APIs:
+## Utilities
 
-- `secrets`: connector-only secret reader for package settings marked as
-  `x-bakingrl-secret`;
-- `fetch(input, init)`: performs a permitted HTTP request.
-- `websocket.connect(url)`: opens a permitted WebSocket connection.
+`currentCompatibility()` returns `{ runtimeApi: "1.0.0", sdk: "1.0.1" }`.
 
-The SDK currently types network values as `unknown` because the host adapter is
-the authority for concrete request and socket shapes. Narrow values in your
-connector code after checking the host behavior you depend on.
+`setting(settings, key, fallback)` reads a typed value with a fallback.
 
-## Runtime APIs
+`createCleanup()` collects cleanup callbacks and runs them in reverse order.
 
-`VisualBus.subscribe(eventName, callback)`
-
-Subscribes to a telemetry or plugin event and returns a cleanup function.
-
-```ts
-const off = context.bus.subscribe("ClockUpdatedSeconds", (event) => {
-  context.root.textContent = String(event.Data.TimeSeconds);
-});
-```
-
-For known Rocket League telemetry events, the callback data is typed from
-`RlTelemetryPayloadByEvent`. Unknown event names are typed as `unknown`.
-
-`BackendBus.emit(eventName, payload)`
-
-Publishes an event from a backend service. The package manifest must allow the
-published event name.
-
-```ts
-context.bus.emit("plugin.com.example.scoreboard.ready", { ok: true });
-```
-
-`ReadonlyRegistry.get(key)`
-
-Reads a registry value and resolves `null` when the key is absent or not
-available to the caller.
-
-```ts
-const value = await context.registry.get("plugin.com.example.scoreboard.state");
-```
-
-`Registry.get(key)` and `Registry.set(key, value)`
-
-Backend services can synchronously read and write permitted registry values.
-
-```ts
-const previous = context.registry.get("plugin.com.example.scoreboard.count");
-context.registry.set("plugin.com.example.scoreboard.count", Number(previous ?? 0) + 1);
-```
-
-`PluginStorage.readText(uri)` and `PluginStorage.writeText(uri, contents)`
-
-Reads and writes text at permitted storage URIs such as `plugin://self/state.json`.
-The current SDK only defines text storage helpers.
-
-```ts
-await context.storage.writeText("plugin://self/state.json", JSON.stringify({ ok: true }));
-const raw = await context.storage.readText("plugin://self/state.json");
-```
-
-`ComponentLoader.load(ref)`
-
-Loads a component through the host and resolves a `ComponentHandle`. References
-are package/export strings.
-
-```ts
-const component = await context.components.load("com.example.ui/TeamBadge");
-const cleanup = await component.mount(context.root, {
-  teamName: "Blue",
-  color: "#38bdf8"
-});
-```
-
-`ComponentHandle.mount(root, props)`
-
-Mounts the loaded component into the provided DOM root. It can resolve a cleanup
-function.
-
-`ServiceCaller.call(ref, method, input)`
-
-Calls a permitted service method and resolves the method output.
-
-```ts
-const snapshot = await context.services.call("com.example.stats/matchStats", "snapshot");
-```
-
-`AssetResolver.url(ref)`
-
-Returns a host-safe URL for an asset in the provider package.
-
-```ts
-const logoUrl = context.assets.url("assets/logo.png");
-```
-
-`SettingsReader.get(key)` and `SettingsReader.all()`
-
-Backend settings access. `get` returns `undefined` when the key is absent.
-Secrets are intentionally omitted from `settings`.
-
-```ts
-const pollMs = context.settings.get<number>("pollMs") ?? 5000;
-const settings = context.settings.all();
-```
-
-`SecretReader.get(key)` and `SecretReader.configured(key)`
-
-Connector-only secret access. `get` returns `undefined` when the secret is not
-configured. `configured` checks host metadata without reading the keychain.
-`get` reads the keychain on first access, then uses the host's in-memory cache
-until the app exits. Visuals, components, and services do not receive this API.
-
-```ts
-const apiKey = context.secrets.get("apiKey");
-if (!apiKey) {
-  context.diagnostics.warn("API key is not configured.");
-}
-```
-
-`Diagnostics.log(message, data)`, `Diagnostics.warn(message, data)`, and
-`Diagnostics.error(message, data)`
-
-Use diagnostics instead of ad hoc console logging when a context provides it.
-
-```ts
-context.diagnostics.warn("missing optional setting", { key: "accent" });
-```
-
-## Helper Functions
-
-`setting(settings, key, fallback)`
-
-Reads a value from a plain settings object. It returns `fallback` only when the
-stored value is `undefined` or `null`.
-
-```ts
-const showBoost = setting(context.settings, "showBoost", true);
-```
-
-`createCleanup()`
-
-Creates a cleanup stack with two methods:
-
-- `add(cleanup)`: records function values and returns the original argument.
-- `run()`: runs recorded cleanup functions in reverse order.
-
-```ts
-import { createCleanup, defineVisual } from "@bakingrl/plugin-sdk";
-
-export default defineVisual({
-  mount(context) {
-    const cleanup = createCleanup();
-    cleanup.add(context.bus.subscribe("GoalScored", () => {}));
-
-    const timer = window.setInterval(() => {}, 1000);
-    cleanup.add(() => window.clearInterval(timer));
-
-    return cleanup.run;
-  }
-});
-```
-
-`createMockVisualContext(partial)`
-
-Builds a browser-only mock visual context for local tests. Pass a partial
-context to override any default value.
-
-```ts
-import { createMockVisualContext } from "@bakingrl/plugin-sdk";
-import visual from "../src/visuals/scoreboard";
-
-const context = createMockVisualContext({
-  settings: { accent: "#38bdf8" }
-});
-
-await visual.mount(context);
-```
-
-The mock creates a `div` root, a package descriptor, a layout item, no-op
-host APIs, and console-backed diagnostics.
-
-`createMockServiceContext(partial)`
-
-Builds a backend service context for tests. It includes an in-memory registry,
-no-op bus, no-op storage, no-op service caller, empty settings, and
-console-backed diagnostics.
-
-```ts
-import { createMockServiceContext } from "@bakingrl/plugin-sdk";
-import service from "../src/services/match-stats";
-
-const context = createMockServiceContext();
-await service.mount?.(context);
-```
-
-`createMockConnectorContext(partial)`
-
-Builds a backend connector context for tests. It extends the service mock with
-empty secrets, a no-op fetch helper, and a no-op websocket connector.
-
-```ts
-import { createMockConnectorContext } from "@bakingrl/plugin-sdk";
-import connector from "../src/connectors/api-sync";
-
-const context = createMockConnectorContext({
-  secrets: {
-    get(key) {
-      return key === "apiKey" ? "test-key" : undefined;
-    },
-    configured(key) {
-      return key === "apiKey";
-    }
-  }
-});
-await connector.mount?.(context);
-```
-
-## Reference Strings
-
-The SDK does not parse reference strings. The host owns lookup and permission
-checks. Use these forms consistently:
-
-- `package-id/exportName` for component and service references.
-- `plugin.<package-id>.*` for package-owned bus events and registry keys.
-- `plugin://self/...` for package-owned storage paths.
-
-Declare imports and permissions in `bakingrl.plugin.json` so the host can
-authorize those references at runtime.
+`createMockVisualContext()` helps browser visual tests without starting the
+host.

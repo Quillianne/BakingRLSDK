@@ -3,471 +3,89 @@
 .include {docs}
 .doclang {en}
 
-This page shows the common ways to author a BakingRL plugin package after it
-has been generated.
+Current BakingRL plugin authoring uses one model: trusted v3 packages with a
+JavaScript extension host, browser assets, and optional native sidecars.
 
-Use [Plugin Capabilities](plugin-capabilities.qd) for the complete package
-surface, [Plugin Best Practices](plugin-best-practices.qd) for design guidance,
-and [Fullstack Plugin Tutorial](fullstack-plugin-tutorial.qd) for an
-end-to-end visual plus service walkthrough.
-
-The generated template uses Vite, TypeScript, and ESM entry files. Each export
-listed in `bakingrl.plugin.json` must have a matching Vite build input that
-emits the declared `dist/...js` file.
-
-## Classic Generated Package
-
-Create a package, install dependencies, and build it:
+## Development Loop
 
 ```sh
-create-bakingrl-plugin rl-scoreboard
-cd rl-scoreboard
+create-bakingrl-plugin my-plugin
+cd my-plugin
 npm install
 npm run build
 npm run validate
-npm run pack
 npm run install:local
 ```
 
-The default `fullstack-plugin` template contains:
+When the package changes, rebuild it and run `npm run install:local` again.
+The host reloads package metadata and starts extension hosts according to the
+manifest activation events.
 
-```txt
-bakingrl.plugin.json
-package.json
-vite.config.ts
-src/visuals/scoreboard/index.ts
-src/components/team-badge/index.ts
-src/services/match-stats/index.ts
-src/connectors/twitch/index.ts
-```
+## Extension First
 
-Use `npm run add` to add another export without manually editing the manifest
-and Vite input block:
+Use the extension entry for package logic:
 
-```sh
-npm run add -- visual boostMeter
-npm run add -- component PlayerCard
-npm run add -- service matchStats
-npm run add -- connector twitch
-```
+- register commands with `context.commands.registerCommand`;
+- register services with `context.services.register`;
+- call other services with `context.services.call`;
+- persist package state with `context.storage`;
+- publish package state with `context.bus.emit` and `context.registry.set`;
+- start or call native helpers with `context.sidecars`.
 
-After generation, edit the new source file and rebuild.
+The manifest `contributes.services` map is descriptive. The implementation is
+registered from `activate(context)`.
 
-## TypeScript Visual
+## Visuals
 
-A visual is the most direct export type. It receives a DOM root and host APIs.
+Use visuals for editor and overlay rectangles. A visual should fill its assigned
+box, react to `update(context)`, and use `context.item.width`,
+`context.item.height`, `context.item.opacity`, and `context.settings` instead
+of fixed viewport assumptions.
 
-`src/visuals/scoreboard/index.ts`:
+Visuals can subscribe to host events and call services through `VisualContext`.
+They should remain browser-compatible and avoid importing extension-host-only
+modules.
 
-```ts
-import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
+## Pages And Webviews
 
-export default defineVisual({
-  mount(context: VisualContext) {
-    context.root.className = "scoreboard";
-    context.root.textContent = "Waiting for match data";
+Use `contributes.pages` for full host pages, `contributes.webviews` for
+plugin-owned panels, and `contributes.overlays` for OBS/browser rendering
+assets. Keep the browser entry small and communicate through the webview bridge.
 
-    return context.bus.subscribe("UpdateState", (event) => {
-      const teams = event.Data.Game.Teams;
-      const blue = teams.find((team) => team.TeamNum === 0);
-      const orange = teams.find((team) => team.TeamNum === 1);
+Host-owned settings should use JSON Schema through package `settings` or
+`contributes.configuration`. Use a custom webview only when the configuration
+workflow needs rich interaction.
 
-      context.root.textContent =
-        `${blue?.Name ?? "Blue"} ${blue?.Score ?? 0} - ` +
-        `${orange?.Score ?? 0} ${orange?.Name ?? "Orange"}`;
-    });
-  }
-});
-```
+## Services
 
-For the host editor, a visual can expose local editor-only states and actions.
-These events do not reach the live host bus:
+Services are ordinary methods registered from the extension host:
 
 ```ts
-export default defineVisual({
-  mount(context: VisualContext) {
-    context.root.textContent = "Waiting";
-    return context.bus.subscribe("UpdateState", (event) => {
-      const teams = event.Data.Game.Teams;
-      context.root.textContent = `${teams[0]?.Score ?? 0} - ${teams[1]?.Score ?? 0}`;
-    });
+context.services.register("matchStats", {
+  snapshot() {
+    return currentSnapshot;
   },
-  editor: {
-    mount(context: VisualContext) {
-      context.editor?.emit("UpdateState", {
-        Game: {
-          Teams: [
-            { TeamNum: 0, Name: "Blue", Score: 1 },
-            { TeamNum: 1, Name: "Orange", Score: 0 }
-          ]
-        }
-      } as any);
-    },
-    actions() {
-      return [
-        {
-          id: "tie",
-          label: "Tie",
-          run(context: VisualContext) {
-            context.editor?.emit("UpdateState", {
-              Game: {
-                Teams: [
-                  { TeamNum: 0, Name: "Blue", Score: 2 },
-                  { TeamNum: 1, Name: "Orange", Score: 2 }
-                ]
-              }
-            } as any);
-          }
-        }
-      ];
-    }
+  reset() {
+    currentSnapshot = createEmptySnapshot();
+    return currentSnapshot;
   }
 });
 ```
 
-Manifest entry:
+Declare service names and method names in `contributes.services` so the host,
+developer tools, and marketplace can inspect the package before activation.
 
-```json
-{
-  "exports": {
-    "visuals": {
-      "scoreboard": {
-        "entry": "dist/visuals/scoreboard.js",
-        "defaultSize": [600, 90]
-      }
-    }
-  }
-}
-```
+## Sidecars
 
-Vite input:
+Use sidecars for native Rust code, long-running helpers, or integrations that
+should not run inside the Tauri process. Declare them in `runtime.sidecars` and
+call them from `context.sidecars`.
 
-```ts
-rollupOptions: {
-  input: {
-    "visuals/scoreboard": "src/visuals/scoreboard/index.ts"
-  }
-}
-```
+Sidecars speak JSON-RPC over stdio. BakingRL supervises start, stop, restart,
+logs, diagnostics, and crash-loop detection.
 
-The output name `visuals/scoreboard` is what creates
-`dist/visuals/scoreboard.js`.
+## Diagnostics
 
-## TypeScript Component
-
-Components are reusable DOM fragments mounted by visuals through the host.
-
-`src/components/team-badge/index.ts`:
-
-```ts
-import { defineComponent, type ComponentContext } from "@bakingrl/plugin-sdk";
-
-export default defineComponent({
-  mount(context: ComponentContext, props: Record<string, unknown>) {
-    const teamName = String(props.teamName ?? "Team");
-    const color = String(props.color ?? "#38bdf8");
-
-    context.root.innerHTML = `
-      <span class="team-badge">
-        <span class="team-badge__dot"></span>
-        <span>${teamName}</span>
-      </span>
-    `;
-
-    context.root
-      .querySelector<HTMLElement>(".team-badge__dot")
-      ?.style.setProperty("background", color);
-  }
-});
-```
-
-Visuals load components by reference:
-
-```ts
-const handle = await context.components.load("com.example.ui/TeamBadge");
-const cleanup = await handle.mount(context.root, {
-  teamName: "Blue",
-  color: "#38bdf8"
-});
-```
-
-Declare component imports in the consuming package manifest when the component
-comes from another package.
-
-## TypeScript Service
-
-Services run in the backend sandbox and expose RPC methods.
-
-`src/services/match-stats/index.ts`:
-
-```ts
-import { defineService, type ServiceContext } from "@bakingrl/plugin-sdk";
-
-let lastSnapshot: unknown = null;
-
-export default defineService({
-  mount(context: ServiceContext) {
-    return context.bus.subscribe("UpdateState", (event) => {
-      lastSnapshot = event.Data;
-      context.registry.set("plugin.com.example.scoreboard.current", event.Data);
-    });
-  },
-  methods: {
-    snapshot() {
-      return lastSnapshot;
-    },
-    reset() {
-      lastSnapshot = null;
-      return { ok: true };
-    }
-  }
-});
-```
-
-Visuals can call a permitted service:
-
-```ts
-const snapshot = await context.services.call(
-  "com.example.scoreboard/matchStats",
-  "snapshot"
-);
-```
-
-## Separate HTML And CSS Files
-
-Use this pattern when a visual is easier to maintain with separate markup and
-style files. Vite can import HTML as raw text and bundle CSS from the entry.
-
-Recommended file layout:
-
-```txt
-src/visuals/scoreboard/index.ts
-src/visuals/scoreboard/template.html
-src/visuals/scoreboard/style.css
-```
-
-`template.html`:
-
-```html
-<div class="scoreboard">
-  <div class="scoreboard__team" data-blue>Blue</div>
-  <div class="scoreboard__score" data-score>0 - 0</div>
-  <div class="scoreboard__team" data-orange>Orange</div>
-</div>
-```
-
-`style.css`:
-
-```css
-.scoreboard {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 16px;
-  height: 100%;
-  padding: 0 24px;
-  color: white;
-  background: rgba(10, 14, 18, 0.86);
-  font: 700 24px Inter, Arial, sans-serif;
-}
-
-.scoreboard__score {
-  color: #38bdf8;
-}
-
-.scoreboard__team[data-orange] {
-  text-align: right;
-}
-```
-
-`index.ts`:
-
-```ts
-import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
-import template from "./template.html?raw";
-import "./style.css";
-
-export default defineVisual({
-  mount(context: VisualContext) {
-    context.root.innerHTML = template;
-
-    const blueName = context.root.querySelector<HTMLElement>("[data-blue]");
-    const orangeName = context.root.querySelector<HTMLElement>("[data-orange]");
-    const score = context.root.querySelector<HTMLElement>("[data-score]");
-
-    return context.bus.subscribe("UpdateState", (event) => {
-      const teams = event.Data.Game.Teams;
-      const blue = teams.find((team) => team.TeamNum === 0);
-      const orange = teams.find((team) => team.TeamNum === 1);
-
-      if (blueName) blueName.textContent = blue?.Name ?? "Blue";
-      if (orangeName) orangeName.textContent = orange?.Name ?? "Orange";
-      if (score) score.textContent = `${blue?.Score ?? 0} - ${orange?.Score ?? 0}`;
-    });
-  }
-});
-```
-
-The generated template includes `vite/client` TypeScript types, so `?raw`
-imports are understood by `npm run check`.
-
-## Static Assets
-
-Place images, fonts, and other package assets under an `assets/` directory and
-resolve them through the SDK context:
-
-```ts
-const logoUrl = context.assets.url("assets/logo.png");
-context.root.innerHTML = `<img src="${logoUrl}" alt="">`;
-```
-
-Do not build absolute local filesystem paths into plugin code. The host decides
-how package files are served.
-
-## Settings
-
-Visual exports can declare instance settings in the manifest:
-
-```json
-{
-  "exports": {
-    "visuals": {
-      "scoreboard": {
-        "entry": "dist/visuals/scoreboard.js",
-        "defaultSize": [600, 90],
-        "settings": "src/visuals/scoreboard/settings.schema.json"
-      }
-    }
-  }
-}
-```
-
-Read settings at runtime with the `setting` helper:
-
-```ts
-import { defineVisual, setting, type VisualContext } from "@bakingrl/plugin-sdk";
-
-type Instance = {
-  accent: string;
-};
-
-const instances = new Map<HTMLElement, Instance>();
-
-function render(context: VisualContext, instance: Instance) {
-  context.root.style.setProperty("--accent", instance.accent);
-}
-
-export default defineVisual({
-  mount(context: VisualContext) {
-    const instance = {
-      accent: setting(context.settings, "accent", "#38bdf8")
-    };
-    instances.set(context.root, instance);
-    render(context, instance);
-    return () => instances.delete(context.root);
-  },
-  update(context) {
-    const instance = instances.get(context.root);
-    if (!instance) return;
-    instance.accent = setting(context.settings, "accent", "#38bdf8");
-    render(context, instance);
-  }
-});
-```
-
-When an instance setting affects the rendered output, implement
-`update(context)` and rerender from the new `context.settings`. The editor
-pushes settings and metadata changes to mounted visuals. A host may remount
-visuals that do not expose `update`, but that is a fallback behavior, not the
-recommended refresh path. Relying on remounting can reset local state,
-subscriptions, timers, and animations.
-
-Packages can also declare package-level settings:
-
-```json
-{
-  "settings": "src/settings.schema.json"
-}
-```
-
-Package-level secret fields use `x-bakingrl-secret: true`, are stored in the OS
-keychain, and are readable only from connectors through `context.secrets`.
-Non-secret package settings are available through `context.settings`.
-Use `context.secrets.configured(key)` for UI/status checks; call
-`context.secrets.get(key)` only when the connector actually needs the value.
-The host caches secret values in memory after the first keychain read.
-
-## Visual Sizing
-
-The page or layout editor owns the outer rectangle of each visual. Your visual
-should render inside `context.root` and treat that element as the sizing
-boundary. `defaultSize` in the manifest is only the initial placement size; the
-user can resize the instance afterward.
-
-For flexible widgets, use normal CSS with `width: 100%`, `height: 100%`, and
-responsive layout inside the root. For fixed-design broadcast graphics, wrap the
-design in an inner element with a known design size and scale that inner element
-to fit `context.root` with a `ResizeObserver`. Return a cleanup function that
-disconnects the observer.
-
-Do not position visual content relative to the viewport, mutate DOM outside
-`context.root`, or depend on editor reloads to apply sizing or settings
-changes.
-
-## Package Configuration Page
-
-A package can declare one private configuration page. This page opens from the
-package configuration action inside BakingRL. It is not a public page template
-and its private visuals are not shown in the normal visual picker.
-
-```json
-{
-  "exports": {
-    "configuration": {
-      "path": "pages/configuration.json",
-      "title": "Package Settings",
-      "visuals": {
-        "settingsPanel": {
-          "entry": "dist/configuration/settings-panel.js",
-          "defaultSize": [1200, 740]
-        }
-      }
-    }
-  }
-}
-```
-
-The host renders every package configuration page on a fixed `1200x740`
-canvas. Design configuration visuals for that size and keep persistent package
-state behind host APIs or package settings instead of local filesystem paths.
-If the package declares secrets, BakingRL renders those fields in host-owned UI
-next to the custom page so plugin frontend code never sees submitted secret
-values.
-
-## Local Test Fixtures
-
-The SDK mock helpers let simple tests mount exports without the BakingRL host:
-
-```ts
-import { createMockVisualContext } from "@bakingrl/plugin-sdk";
-import visual from "../src/visuals/scoreboard";
-
-const context = createMockVisualContext();
-const cleanup = await visual.mount(context);
-
-if (typeof cleanup === "function") cleanup();
-```
-
-Telemetry helpers create typed frames for tests around your own rendering
-functions:
-
-```ts
-import { mockUpdateState } from "@bakingrl/plugin-sdk";
-
-const frame = mockUpdateState({
-  TimeSeconds: 120
-});
-```
-
-For full runtime behavior, build the package, run `npm run install:local`, and
-reload packages in the BakingRL app.
+Use `context.logger` for runtime logs and `context.diagnostics` for user-visible
+plugin diagnostics. A package should make failures obvious enough that the host
+Developer UI can explain which plugin broke and why.

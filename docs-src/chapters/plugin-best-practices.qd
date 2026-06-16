@@ -17,16 +17,13 @@ Use a service for backend state. Services are the right place to aggregate
 telemetry, publish package events, write registry snapshots, expose RPC methods,
 and keep state that several visuals or pages need.
 
-Use a connector for external systems. Request network hosts narrowly, keep
-secret reads inside connectors, and move reusable package state into a service
-when visuals need to consume the result.
+Use a native sidecar for heavier trusted work or platform-specific integration.
+Keep the public API small and expose the useful surface through an
+extension-host service.
 
-Use a component when several visuals need the same browser UI fragment. Load it
-through the host instead of importing another package directly.
-
-Use page and layout templates to give users a starting point. Keep templates
-portable by relying on package/export references and item settings rather than
-specific template IDs.
+Use page and overlay templates to give users a starting point. Keep templates
+portable by relying on package contribution references and item settings rather
+than specific template IDs.
 
 Use a private configuration page only for package-specific workflows that need
 more than generated settings fields. Leave secrets in the host-owned settings
@@ -106,20 +103,20 @@ Use package-scoped names:
 - registry keys: `plugin.<package-id>.*`;
 - storage: `plugin://self/*`.
 
-Treat telemetry, settings, registry values, RPC input, and component props as
-untrusted. Validate or narrow values before using them in rendering,
-state transitions, network calls, or persisted data.
+Treat telemetry, settings, registry values, RPC input, and webview messages as
+untrusted. Validate or narrow values before using them in rendering, state
+transitions, network calls, or persisted data.
 
 Do not store secrets in package source, JSON settings, registry values, storage
-files, generated bundles, logs, screenshots, or test fixtures. Connector
-secrets should be read only when needed, and `configured(key)` should be used
+files, generated bundles, logs, screenshots, or test fixtures. Read secrets
+through `context.secrets` only when needed, and use configured-state metadata
 for status checks that do not require secret material.
 
 ## Package For Maintenance
 
 Keep the manifest, Vite inputs, source files, and generated `dist/` entries in
-sync. Prefer `npm run add -- visual|component|service|connector <name>` for new
-capabilities in generated packages.
+sync. Add new contributions to `contributes`, export runtime services from the
+extension host, and rebuild before validation.
 
 Declare `compatibility.runtimeApi` explicitly and rebuild packages when the
 runtime API changes. Do not rely on SDK version alone for compatibility.
@@ -130,4 +127,3 @@ effective permissions the host will see.
 
 Document package-owned events, registry keys, settings, and permissions in the
 package README. That keeps marketplace review and host debugging tractable.
-

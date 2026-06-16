@@ -36,9 +36,9 @@ export default defineVisual({
 });
 ```
 
-This SDK targets BakingRL plugin package schemas `bakingrl.plugin/2` and
-`bakingrl.plugin/3`, SDK version `1.0.1`, and runtime API `1.0.0`. Current
-BakingRL hosts support `>=1.0.0 <2.0.0`.
+This SDK targets BakingRL trusted plugin package schema `bakingrl.plugin/3`,
+SDK version `1.0.1`, and runtime API `1.0.0`. Current BakingRL hosts support
+`>=1.0.0 <2.0.0`.
 
 See the repository `docs-src/` documentation for the full SDK API, manifest
 format, telemetry types, and security model.

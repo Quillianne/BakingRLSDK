@@ -23,21 +23,6 @@ const v3ContributionMaps = [
   "schemas"
 ];
 const emptyV3Contributes = () => Object.fromEntries(v3ContributionMaps.map((name) => [name, {}]));
-const emptyPermissions = () => ({
-  bus: {
-    read: [],
-    publish: []
-  },
-  registry: {
-    read: [],
-    write: []
-  },
-  network: {
-    http: [],
-    websocket: []
-  },
-  storage: []
-});
 
 function fail(message) {
   console.error(message);
@@ -92,8 +77,8 @@ function readPackageManifest(packageDir) {
   const manifestPath = join(packageDir, "bakingrl.plugin.json");
   if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
   const manifest = readJson(manifestPath);
-  if (manifest.schema !== "bakingrl.plugin/2" && manifest.schema !== "bakingrl.plugin/3") {
-    fail("manifest.schema must be bakingrl.plugin/2 or bakingrl.plugin/3");
+  if (manifest.schema !== "bakingrl.plugin/3") {
+    fail("manifest.schema must be bakingrl.plugin/3");
   }
   for (const field of ["id", "name", "version"]) {
     if (typeof manifest[field] !== "string" || manifest[field].trim() === "") {
@@ -197,48 +182,6 @@ function validatePackageSettingsSchema(packageDir, settingsPath) {
   for (const [key, property] of Object.entries(schema.properties)) {
     validateSettingsProperty(`settings.${key}`, property);
   }
-}
-
-function validatePackageV2(packageDir, manifest) {
-  validatePackageSettingsSchema(packageDir, manifest.settings);
-  if (!manifest.exports || typeof manifest.exports !== "object") {
-    fail("manifest.exports is required");
-  }
-  if (manifest.exports.overlays) {
-    fail("manifest.exports.overlays has been renamed to manifest.exports.layouts");
-  }
-  const entryGroups = [
-    ["visuals", manifest.exports.visuals ?? {}],
-    ["components", manifest.exports.components ?? {}],
-    ["services", manifest.exports.services ?? {}],
-    ["connectors", manifest.exports.connectors ?? {}]
-  ];
-  let exportCount = 0;
-  for (const [groupName, group] of entryGroups) {
-    for (const [name, exportDef] of Object.entries(group)) {
-      exportCount += 1;
-      validateBuiltEntry(packageDir, groupName, name, exportDef);
-    }
-  }
-  for (const [groupName, label, group] of [
-    ["pages", "Page", manifest.exports.pages ?? {}],
-    ["layouts", "Layout", manifest.exports.layouts ?? {}]
-  ]) {
-    for (const [name, exportDef] of Object.entries(group)) {
-      exportCount += 1;
-      validatePathField(packageDir, `${groupName}.${name}`, exportDef, "path", `${label} template`);
-    }
-  }
-  if (manifest.exports.configuration) {
-    exportCount += 1;
-    const configuration = manifest.exports.configuration;
-    validatePathField(packageDir, "configuration", configuration, "path", "Configuration page");
-    const visuals = configuration.visuals ?? {};
-    for (const [name, exportDef] of Object.entries(visuals)) {
-      validateBuiltEntry(packageDir, "configuration.visuals", name, exportDef);
-    }
-  }
-  if (exportCount === 0) fail("Package must export at least one capability");
 }
 
 function validatePathField(packageDir, label, object, field, artifactLabel) {
@@ -478,11 +421,7 @@ function inferSettingsPropertyType(property) {
 function validatePackage(packageDir, { print = true } = {}) {
   const manifest = readPackageManifest(packageDir);
   validateRuntimeCompatibility(manifest);
-  if (manifest.schema === "bakingrl.plugin/2") {
-    validatePackageV2(packageDir, manifest);
-  } else {
-    validatePackageV3(packageDir, manifest);
-  }
+  validatePackageV3(packageDir, manifest);
   if (print) console.log(`Package validation passed: ${manifest.id}`);
   return manifest;
 }
@@ -613,9 +552,7 @@ function validateListing(packageDir, { print = true } = {}) {
 function effectivePermissions(manifest) {
   const packageScope = `plugin.${manifest.id}.*`;
   const storageScope = "plugin://self/*";
-  const permissions = manifest.schema === "bakingrl.plugin/3"
-    ? manifest.capabilities?.permissions ?? {}
-    : manifest.permissions ?? {};
+  const permissions = manifest.capabilities?.permissions ?? {};
   const bus = permissions.bus ?? {};
   const registry = permissions.registry ?? {};
   const network = permissions.network ?? {};
@@ -860,232 +797,6 @@ function writeZipArchive(packageDir, bundlePath, excludedFiles = new Set()) {
   writeFileSync(bundlePath, Buffer.concat([...chunks, ...centralDirectory, end]));
 }
 
-function slugifyName(value) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function validateExportName(value) {
-  if (typeof value !== "string" || value.trim() === "") {
-    fail("Export name must be a non-empty string.");
-  }
-  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
-    fail(`Export name '${value}' can only contain letters, numbers, dashes, and underscores.`);
-  }
-}
-
-function writeNewFile(path, contents) {
-  if (existsSync(path)) fail(`Refusing to overwrite existing file: ${path}`);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, contents);
-}
-
-function addViteInput(packageDir, inputName, sourcePath) {
-  const configPath = join(packageDir, "vite.config.ts");
-  if (!existsSync(configPath)) fail(`Missing vite.config.ts in ${packageDir}`);
-  const config = readFileSync(configPath, "utf8");
-  if (config.includes(`"${inputName}"`) || config.includes(`'${inputName}'`)) {
-    fail(`vite.config.ts already contains input '${inputName}'.`);
-  }
-  const marker = "      input: {\n";
-  const start = config.indexOf(marker);
-  if (start === -1) {
-    fail("Unable to update vite.config.ts: expected the generated input block format.");
-  }
-  const innerStart = start + marker.length;
-  const endMarker = "\n      },\n      output:";
-  const end = config.indexOf(endMarker, innerStart);
-  if (end === -1) {
-    fail("Unable to update vite.config.ts: expected the generated output block format.");
-  }
-  const inner = config.slice(innerStart, end).trimEnd();
-  const needsComma = inner.trim().length > 0 && !inner.trimEnd().endsWith(",");
-  const nextInner = `${inner}${needsComma ? "," : ""}\n        "${inputName}": "${sourcePath}"`;
-  writeFileSync(configPath, `${config.slice(0, innerStart)}${nextInner}${config.slice(end)}`);
-}
-
-function addCapability(packageDir, capability, exportName) {
-  const groups = {
-    visual: "visuals",
-    component: "components",
-    service: "services",
-    connector: "connectors"
-  };
-  const group = groups[capability];
-  if (!group) fail("Capability must be one of: visual, component, service, connector.");
-  validateExportName(exportName);
-  const slug = slugifyName(exportName);
-  if (!slug) fail("Export name must contain at least one letter or number.");
-
-  const manifestPath = join(packageDir, "bakingrl.plugin.json");
-  if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
-  const manifest = readJson(manifestPath);
-  if (manifest.schema !== "bakingrl.plugin/2") fail("manifest.schema must be bakingrl.plugin/2");
-  manifest.exports ??= {};
-  manifest.exports[group] ??= {};
-  if (manifest.exports[group][exportName]) {
-    fail(`${capability} export '${exportName}' already exists in bakingrl.plugin.json.`);
-  }
-
-  if (capability === "visual") {
-    const sourcePath = `src/visuals/${slug}/index.ts`;
-    manifest.exports.visuals[exportName] = {
-      entry: `dist/visuals/${slug}.js`,
-      defaultSize: [320, 120]
-    };
-    writeNewFile(
-      join(packageDir, sourcePath),
-      `import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
-
-function render(context: VisualContext, label = "${exportName}") {
-  context.root.innerHTML = \`
-    <div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:rgba(10,14,18,.82);color:white;border:1px solid rgba(255,255,255,.18);font:700 20px Inter,Arial,sans-serif;opacity:\${context.item.opacity};">
-      \${label}
-    </div>
-  \`;
-}
-
-export default defineVisual({
-  async mount(context: VisualContext) {
-    render(context);
-  },
-  update(context: VisualContext) {
-    render(context);
-  },
-  editor: {
-    mount(context: VisualContext) {
-      render(context, "Editor preview");
-    },
-    actions() {
-      return [
-        {
-          id: "default",
-          label: "Default",
-          run(context: VisualContext) {
-            render(context);
-          }
-        },
-        {
-          id: "triggered",
-          label: "Triggered",
-          run(context: VisualContext) {
-            render(context, "Triggered");
-          }
-        }
-      ];
-    }
-  }
-});
-`
-    );
-    addViteInput(packageDir, `visuals/${slug}`, sourcePath);
-  } else if (capability === "component") {
-    const sourcePath = `src/components/${slug}/index.ts`;
-    const propsPath = `src/components/${slug}/props.schema.json`;
-    manifest.exports.components[exportName] = {
-      entry: `dist/components/${slug}.js`,
-      props: propsPath
-    };
-    writeNewFile(
-      join(packageDir, sourcePath),
-      `import { defineComponent, type ComponentContext } from "@bakingrl/plugin-sdk";
-
-export default defineComponent({
-  async mount(context: ComponentContext, props: Record<string, unknown>) {
-    const label = String(props.label ?? "${exportName}");
-    context.root.innerHTML = \`
-      <span style="display:inline-flex;align-items:center;color:white;font:700 14px Inter,Arial,sans-serif;">
-        \${label}
-      </span>
-    \`;
-  }
-});
-`
-    );
-    writeNewFile(
-      join(packageDir, propsPath),
-      `${JSON.stringify(
-        {
-          type: "object",
-          properties: {
-            label: { type: "string" }
-          },
-          additionalProperties: true
-        },
-        null,
-        2
-      )}\n`
-    );
-    addViteInput(packageDir, `components/${slug}`, sourcePath);
-  } else if (capability === "service") {
-    const sourcePath = `src/services/${slug}/index.ts`;
-    const schemaPath = `src/services/${slug}/methods.schema.json`;
-    manifest.exports.services[exportName] = {
-      entry: `dist/services/${slug}.js`,
-      methods: ["ping"],
-      schema: schemaPath
-    };
-    writeNewFile(
-      join(packageDir, sourcePath),
-      `import { defineService } from "@bakingrl/plugin-sdk";
-
-export default defineService({
-  methods: {
-    async ping(input: unknown) {
-      return { ok: true, input };
-    }
-  }
-});
-`
-    );
-    writeNewFile(
-      join(packageDir, schemaPath),
-      `${JSON.stringify(
-        {
-          type: "object",
-          methods: {
-            ping: {
-              input: true,
-              output: {
-                type: "object",
-                properties: {
-                  ok: { type: "boolean" }
-                }
-              }
-            }
-          }
-        },
-        null,
-        2
-      )}\n`
-    );
-    addViteInput(packageDir, `services/${slug}`, sourcePath);
-  } else {
-    const sourcePath = `src/connectors/${slug}/index.ts`;
-    manifest.exports.connectors[exportName] = {
-      entry: `dist/connectors/${slug}.js`
-    };
-    writeNewFile(
-      join(packageDir, sourcePath),
-      `import { defineConnector, type ConnectorContext } from "@bakingrl/plugin-sdk";
-
-export default defineConnector({
-  async mount(context: ConnectorContext) {
-    context.diagnostics.log("${exportName} connector mounted.");
-  }
-});
-`
-    );
-    addViteInput(packageDir, `connectors/${slug}`, sourcePath);
-  }
-
-  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`Added ${capability} export '${exportName}'.`);
-}
-
 function writeHashes(packageDir, excludedFiles = new Set()) {
   const files = {};
   for (const file of walkFiles(packageDir, packageDir, [], excludedFiles)) {
@@ -1189,26 +900,14 @@ function collectBuildEntries(manifest) {
     if (typeof entry === "string") entries.push({ kind, name, entry });
   };
 
-  if (manifest.schema === "bakingrl.plugin/3") {
-    addEntry("runtime.extensionHost", "extensionHost", manifest.runtime?.extensionHost?.entry);
-    for (const [name, visual] of Object.entries(manifest.contributes?.visuals ?? {})) {
-      addEntry("contributes.visuals", name, visual.entry);
-    }
-    for (const mapName of ["views", "pages", "overlays", "webviews"]) {
-      for (const [name, webview] of Object.entries(manifest.contributes?.[mapName] ?? {})) {
-        addEntry(`contributes.${mapName}`, name, webview.entry);
-      }
-    }
-    return entries;
+  addEntry("runtime.extensionHost", "extensionHost", manifest.runtime?.extensionHost?.entry);
+  for (const [name, visual] of Object.entries(manifest.contributes?.visuals ?? {})) {
+    addEntry("contributes.visuals", name, visual.entry);
   }
-
-  for (const groupName of ["visuals", "components", "services", "connectors"]) {
-    for (const [name, exportDef] of Object.entries(manifest.exports?.[groupName] ?? {})) {
-      addEntry(`exports.${groupName}`, name, exportDef.entry);
+  for (const mapName of ["views", "pages", "overlays", "webviews"]) {
+    for (const [name, webview] of Object.entries(manifest.contributes?.[mapName] ?? {})) {
+      addEntry(`contributes.${mapName}`, name, webview.entry);
     }
-  }
-  for (const [name, exportDef] of Object.entries(manifest.exports?.configuration?.visuals ?? {})) {
-    addEntry("exports.configuration.visuals", name, exportDef.entry);
   }
   return entries;
 }
@@ -1232,103 +931,10 @@ function doctor(packageDir) {
     },
     buildEntries: collectBuildEntries(manifest)
   };
-  if (manifest.schema === "bakingrl.plugin/3") {
-    summary.sidecars = Object.keys(manifest.runtime.sidecars);
-    summary.activation = manifest.activation;
-    summary.contributes = Object.fromEntries(v3ContributionMaps.map((name) => [name, Object.keys(manifest.contributes[name])]));
-  }
+  summary.sidecars = Object.keys(manifest.runtime.sidecars);
+  summary.activation = manifest.activation;
+  summary.contributes = Object.fromEntries(v3ContributionMaps.map((name) => [name, Object.keys(manifest.contributes[name])]));
   console.log(JSON.stringify(summary, null, 2));
-}
-
-function migrateV2ManifestToV3(manifest) {
-  const contributes = emptyV3Contributes();
-
-  for (const [name, visual] of Object.entries(manifest.exports?.visuals ?? {})) {
-    contributes.visuals[name] = {
-      entry: visual.entry,
-      ...(visual.defaultSize ? { defaultSize: visual.defaultSize } : {}),
-      ...(visual.settings ? { settings: visual.settings } : {})
-    };
-  }
-  for (const [name, service] of Object.entries(manifest.exports?.services ?? {})) {
-    contributes.services[name] = {
-      ...(service.methods ? { methods: service.methods } : {}),
-      ...(service.schema ? { schema: service.schema } : {})
-    };
-  }
-  for (const [name, page] of Object.entries(manifest.exports?.pages ?? {})) {
-    contributes.pages[name] = {
-      path: page.path,
-      ...(page.title ? { title: page.title } : {}),
-      ...(page.description ? { description: page.description } : {})
-    };
-  }
-  for (const [name, layout] of Object.entries(manifest.exports?.layouts ?? {})) {
-    contributes.overlays[name] = {
-      path: layout.path,
-      ...(layout.title ? { title: layout.title } : {}),
-      ...(layout.description ? { description: layout.description } : {})
-    };
-  }
-  if (manifest.exports?.configuration) {
-    contributes.configuration.package = {
-      schema: manifest.settings ?? manifest.exports.configuration.path,
-      ...(manifest.exports.configuration.title ? { title: manifest.exports.configuration.title } : {})
-    };
-  }
-  for (const [name, asset] of Object.entries(manifest.exports?.assets ?? {})) {
-    contributes.assets[name] = { path: asset.path };
-  }
-  for (const [name, schema] of Object.entries(manifest.exports?.schemas ?? {})) {
-    contributes.schemas[name] = { path: schema.path };
-  }
-
-  return {
-    schema: "bakingrl.plugin/3",
-    kind: "trusted",
-    id: manifest.id,
-    name: manifest.name,
-    version: manifest.version,
-    ...(manifest.author ? { author: manifest.author } : {}),
-    compatibility: {
-      runtimeApi: manifest.compatibility?.runtimeApi ?? runtimeApiVersion,
-      sdk: sdkVersion
-    },
-    settings: manifest.settings,
-    runtime: {
-      extensionHost: {
-        entry: "dist/extension/index.js"
-      },
-      sidecars: {}
-    },
-    activation: {
-      events: ["onStartup"]
-    },
-    contributes,
-    capabilities: {
-      permissions: manifest.permissions ?? emptyPermissions()
-    },
-    diagnostics: {
-      enabled: true
-    }
-  };
-}
-
-function migrateV2(packageDir, options) {
-  const manifest = readPackageManifest(packageDir);
-  if (manifest.schema !== "bakingrl.plugin/2") {
-    fail("migrate-v2 expects a bakingrl.plugin/2 manifest");
-  }
-  validateRuntimeCompatibility(manifest);
-  const migrated = migrateV2ManifestToV3(manifest);
-  const outputPath = typeof options.output === "string" ? resolve(process.cwd(), options.output) : null;
-  if (options.write && outputPath) fail("Use either --write or --output, not both.");
-  if (options.write) {
-    writeJson(join(packageDir, "bakingrl.plugin.json"), migrated);
-    console.error(`Wrote v3 manifest to ${join(packageDir, "bakingrl.plugin.json")}`);
-    return;
-  }
-  writeOrPrintJson(migrated, outputPath);
 }
 
 function inspect(packageDir) {
@@ -1341,17 +947,11 @@ function inspect(packageDir) {
     compatibility: manifest.compatibility,
     settings: manifest.settings ?? null,
     diagnostics: manifest.diagnostics ?? null,
-    imports: manifest.imports ?? {}
+    runtime: manifest.runtime,
+    activation: manifest.activation,
+    contributes: manifest.contributes ?? {},
+    capabilities: manifest.capabilities ?? {}
   };
-  if (manifest.schema === "bakingrl.plugin/3") {
-    summary.runtime = manifest.runtime;
-    summary.activation = manifest.activation;
-    summary.contributes = manifest.contributes ?? {};
-    summary.capabilities = manifest.capabilities ?? {};
-  } else {
-    summary.exports = manifest.exports;
-    summary.permissions = manifest.permissions ?? {};
-  }
   console.log(JSON.stringify(summary, null, 2));
 }
 
@@ -1372,14 +972,6 @@ function installLocal(packageDir) {
 
 function main() {
   const [command, ...args] = process.argv.slice(2);
-  if (command === "add") {
-    const [capability, exportName, maybeDir] = args;
-    if (!capability || !exportName) {
-      fail("Usage: node scripts/bakingrl-plugin.mjs add <visual|component|service|connector> <export-name> [package-dir]");
-    }
-    const packageDir = resolve(process.cwd(), maybeDir && !maybeDir.startsWith("-") ? maybeDir : ".");
-    return addCapability(packageDir, capability, exportName);
-  }
   if (command === "keygen") return keygen(args[0]);
   if (command === "sign") {
     const keyIndex = args.indexOf("--key");
@@ -1396,11 +988,6 @@ function main() {
   const packageDir = resolve(process.cwd(), maybeDir && !maybeDir.startsWith("-") ? maybeDir : ".");
   if (command === "validate") return validatePackage(packageDir);
   if (command === "doctor") return doctor(packageDir);
-  if (command === "migrate-v2") {
-    const options = parseOptions(args);
-    const explicitDir = options.positional[0];
-    return migrateV2(resolve(process.cwd(), explicitDir ?? "."), options);
-  }
   if (command === "validate-listing") return validateListing(packageDir);
   if (command === "release-metadata") return releaseMetadata(packageDir, args);
   if (command === "marketplace-entry") return marketplaceEntry(packageDir, args);
@@ -1417,7 +1004,7 @@ function main() {
     console.log(appDataDir());
     return;
   }
-  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|doctor|validate-listing|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs migrate-v2 [package-dir] [--write|--output <path>]\n       node scripts/bakingrl-plugin.mjs add <visual|component|service|connector> <export-name> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]\n       node scripts/bakingrl-plugin.mjs release-metadata [package-dir] --bundle-url <url> --listing-url <url> [--bundle <path>] [--output <path>]\n       node scripts/bakingrl-plugin.mjs marketplace-entry [package-dir] --developer <id> --bundle-url <url> --listing-url <url> [--bundle <path>] [--reviewed-at <iso>] [--output <path>]");
+  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|doctor|validate-listing|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]\n       node scripts/bakingrl-plugin.mjs release-metadata [package-dir] --bundle-url <url> --listing-url <url> [--bundle <path>] [--output <path>]\n       node scripts/bakingrl-plugin.mjs marketplace-entry [package-dir] --developer <id> --bundle-url <url> --listing-url <url> [--bundle <path>] [--reviewed-at <iso>] [--output <path>]");
 }
 
 main();

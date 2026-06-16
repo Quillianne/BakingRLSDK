@@ -48,7 +48,6 @@ export type VisualContext = {
   setActive(active: boolean): void;
   bus: VisualBus;
   registry: ReadonlyRegistry;
-  components: ComponentLoader;
   services: ServiceCaller;
   assets: AssetResolver;
   diagnostics: Diagnostics;
@@ -56,31 +55,6 @@ export type VisualContext = {
 
 export type VisualEditorContext = {
   emit<TEvent extends string>(eventName: TEvent, payload?: BakingRLEventData<TEvent>): void;
-};
-
-export type ComponentContext = {
-  root: HTMLElement;
-  providerPackageId: string;
-  exportName: string;
-  assets: AssetResolver;
-  diagnostics: Diagnostics;
-};
-
-export type ServiceContext = {
-  bus: BackendBus;
-  registry: Registry;
-  storage: PluginStorage;
-  services: ServiceCaller;
-  settings: SettingsReader;
-  diagnostics: Diagnostics;
-};
-
-export type ConnectorContext = ServiceContext & {
-  secrets: SecretReader;
-  fetch(input: string, init?: unknown): Promise<unknown>;
-  websocket: {
-    connect(url: string): Promise<unknown>;
-  };
 };
 
 export type VisualBus = {
@@ -108,14 +82,6 @@ export type PluginStorage = {
   writeText(uri: string, contents: string): Promise<void>;
 };
 
-export type ComponentHandle = {
-  mount(root: HTMLElement, props: Record<string, unknown>): Promise<CleanupFn | void>;
-};
-
-export type ComponentLoader = {
-  load(ref: string): Promise<ComponentHandle>;
-};
-
 export type ServiceCaller = {
   call<TOutput = unknown>(ref: string, method: string, input?: unknown): Promise<TOutput>;
 };
@@ -127,11 +93,6 @@ export type AssetResolver = {
 export type SettingsReader = {
   get<TValue = unknown>(key: string): TValue | undefined;
   all(): Record<string, unknown>;
-};
-
-export type SecretReader = {
-  get(key: string): string | undefined;
-  configured(key: string): boolean;
 };
 
 export type Diagnostics = {
@@ -166,11 +127,12 @@ export type ExtensionSubscription = {
 export type Disposable = ExtensionSubscription;
 
 export type ExtensionLogger = {
-  trace(message: string, data?: unknown): void;
-  debug(message: string, data?: unknown): void;
-  info(message: string, data?: unknown): void;
-  warn(message: string, data?: unknown): void;
-  error(message: string, data?: unknown): void;
+  trace(message: string, data?: unknown): void | Promise<void>;
+  debug(message: string, data?: unknown): void | Promise<void>;
+  log(message: string, data?: unknown): void | Promise<void>;
+  info(message: string, data?: unknown): void | Promise<void>;
+  warn(message: string, data?: unknown): void | Promise<void>;
+  error(message: string, data?: unknown): void | Promise<void>;
 };
 
 export type ExtensionDiagnosticSeverity = "info" | "warning" | "error";
@@ -184,8 +146,12 @@ export type ExtensionDiagnostic = {
 };
 
 export type ExtensionDiagnostics = {
-  report(diagnostic: ExtensionDiagnostic): void;
-  clear(code?: string): void;
+  log(message: string, data?: unknown): void | Promise<void>;
+  info(message: string, data?: unknown): void | Promise<void>;
+  warn(message: string, data?: unknown): void | Promise<void>;
+  error(message: string, data?: unknown): void | Promise<void>;
+  report?(diagnostic: ExtensionDiagnostic): void | Promise<void>;
+  clear?(code?: string): void | Promise<void>;
 };
 
 export type ExtensionSafeMode = {
@@ -193,27 +159,79 @@ export type ExtensionSafeMode = {
   reason?: string;
 };
 
+export type ExtensionBus = {
+  subscribe<TEvent extends string>(
+    eventName: TEvent,
+    callback: (event: BakingRLEvent<BakingRLEventData<TEvent>, TEvent>) => void | Promise<void>
+  ): CleanupFn;
+  emit<TEvent extends string>(eventName: TEvent, payload?: BakingRLEventData<TEvent>): void;
+};
+
+export type ExtensionRegistry = {
+  get<TValue = unknown>(key: string): Promise<TValue | null>;
+  set<TValue = unknown>(key: string, value: TValue): Promise<void>;
+  entries<TValue = unknown>(): Promise<Record<string, TValue>>;
+};
+
+export type ExtensionSecretReader = {
+  get(key: string): Promise<string | undefined>;
+  configured(key: string): Promise<boolean>;
+};
+
+export type ExtensionSidecarController = {
+  declared: string[];
+  start(name: string): Promise<unknown>;
+  stop(name: string): Promise<unknown>;
+  restart(name: string): Promise<unknown>;
+  call<TOutput = unknown>(name: string, method: string, params?: unknown): Promise<TOutput>;
+};
+
+export type ExtensionTelemetry = {
+  event(name: string, properties?: unknown): Promise<unknown>;
+};
+
+export type ExtensionWebviewController = {
+  declared: Record<string, ContributionWebview>;
+  open(id: string, options?: unknown): Promise<unknown>;
+  close(id: string): Promise<unknown>;
+};
+
+export type ExtensionOverlayController = {
+  list<TOutput = unknown>(): Promise<TOutput>;
+  refresh(): Promise<unknown>;
+};
+
 export type ExtensionContext = {
-  extension: {
+  id: string;
+  packageId: string;
+  extensionPath: string;
+  storagePath: string;
+  settings: SettingsReader & Record<string, unknown>;
+  configuration: SettingsReader & Record<string, unknown>;
+  extension?: {
     id: string;
     name: string;
     version: string;
     runtimeApi: RuntimeApiVersion | string;
   };
-  mode: ExtensionMode;
+  mode?: ExtensionMode;
   subscriptions: ExtensionSubscription[];
   storage: PluginStorage;
+  bus: ExtensionBus;
+  registry: ExtensionRegistry;
   logger: ExtensionLogger;
   diagnostics: ExtensionDiagnostics;
-  safeMode: ExtensionSafeMode;
-  secrets: SecretReader;
-  configuration: SettingsReader;
+  safeMode?: ExtensionSafeMode;
+  secrets: ExtensionSecretReader;
   commands: ExtensionCommandRegistry;
   services: ExtensionServiceRegistry;
-  views: ExtensionViewRegistry;
-  pages: ExtensionPageRegistry;
-  overlays: ExtensionOverlayRegistry;
-  assets: AssetResolver;
+  views?: ExtensionViewRegistry;
+  pages?: ExtensionPageRegistry;
+  overlays: ExtensionOverlayController;
+  webviews: ExtensionWebviewController;
+  sidecars: ExtensionSidecarController;
+  telemetry: ExtensionTelemetry;
+  assets?: AssetResolver;
 };
 
 export type ExtensionActivate = (context: ExtensionContext) => void | ExtensionSubscription | Promise<void | ExtensionSubscription>;
@@ -232,9 +250,10 @@ export type ExtensionCommandRegistry = {
   executeCommand<TOutput = unknown>(command: string, ...args: unknown[]): Promise<TOutput>;
 };
 
-export type ExtensionServiceMethod = (input: unknown, context: ExtensionContext) => unknown | Promise<unknown>;
+export type ExtensionServiceMethod = (input: unknown) => unknown | Promise<unknown>;
 
 export type ExtensionServiceRegistry = {
+  register(id: string, methods: Record<string, ExtensionServiceMethod>): ExtensionSubscription;
   registerService(id: string, methods: Record<string, ExtensionServiceMethod>): ExtensionSubscription;
   call<TOutput = unknown>(service: string, method: string, input?: unknown): Promise<TOutput>;
 };
@@ -460,24 +479,6 @@ export type VisualEditorAction = {
   run(context: VisualContext): void | Promise<void>;
 };
 
-export type ComponentExport = {
-  mount(
-    context: ComponentContext,
-    props: Record<string, unknown>
-  ): void | CleanupFn | Promise<void | CleanupFn>;
-};
-
-export type ServiceExport = {
-  mount?(context: ServiceContext): void | Promise<void>;
-  unmount?(): void | Promise<void>;
-  methods?: Record<string, (input: unknown, context: ServiceContext) => unknown | Promise<unknown>>;
-};
-
-export type ConnectorExport = {
-  mount?(context: ConnectorContext): void | Promise<void>;
-  unmount?(): void | Promise<void>;
-};
-
 export type ManifestCompatibility = {
   runtimeApi: string;
   sdk?: string;
@@ -489,87 +490,12 @@ export type ManifestVisualExport = {
   settings?: string;
 };
 
-export type ManifestComponentExport = {
-  entry: string;
-  props?: string;
-};
-
-export type ManifestServiceExport = {
-  entry: string;
-  methods?: string[];
-  schema?: string;
-};
-
-export type ManifestConnectorExport = {
-  entry: string;
-};
-
-export type ManifestTemplateExport = {
-  path: string;
-  title?: string;
-  description?: string;
-};
-
-export type ManifestConfigurationExport = {
-  path: string;
-  title?: string;
-  description?: string;
-  visuals?: Record<string, ManifestVisualExport>;
-};
-
-export type PluginManifest = {
-  schema: "bakingrl.plugin/2";
-  id: string;
-  name: string;
-  version: string;
-  author?: string;
-  compatibility: ManifestCompatibility;
-  exports: {
-    visuals?: Record<string, ManifestVisualExport>;
-    components?: Record<string, ManifestComponentExport>;
-    services?: Record<string, ManifestServiceExport>;
-    connectors?: Record<string, ManifestConnectorExport>;
-    assets?: Record<string, { path: string }>;
-    schemas?: Record<string, { path: string }>;
-    pages?: Record<string, ManifestTemplateExport>;
-    layouts?: Record<string, ManifestTemplateExport>;
-    configuration?: ManifestConfigurationExport;
-  };
-  imports?: {
-    components?: string[];
-    services?: string[];
-  };
-  permissions?: {
-    bus?: {
-      read?: string[];
-      publish?: string[];
-    };
-    registry?: {
-      read?: string[];
-      write?: string[];
-    };
-    network?: {
-      http?: string[];
-      websocket?: string[];
-    };
-    storage?: string[];
-  };
-  settings?: string;
-};
-
 export type PluginDefinition = {
   id: string;
   name: string;
   version: string;
   visuals?: Record<string, () => Promise<unknown>>;
-  components?: Record<string, () => Promise<unknown>>;
-  services?: Record<string, () => Promise<unknown>>;
-  connectors?: Record<string, () => Promise<unknown>>;
 };
-
-export function definePlugin<T extends PluginDefinition>(definition: T): T {
-  return definition;
-}
 
 export function defineExtension<T extends ExtensionModule>(extension: T): T {
   return extension;
@@ -577,18 +503,6 @@ export function defineExtension<T extends ExtensionModule>(extension: T): T {
 
 export function defineVisual<T extends VisualExport>(visual: T): T {
   return visual;
-}
-
-export function defineComponent<T extends ComponentExport>(component: T): T {
-  return component;
-}
-
-export function defineService<T extends ServiceExport>(service: T): T {
-  return service;
-}
-
-export function defineConnector<T extends ConnectorExport>(connector: T): T {
-  return connector;
 }
 
 export function createWebviewBridge(endpoint: WebviewEndpoint): WebviewBridge {
@@ -691,13 +605,6 @@ export function createMockVisualContext(
         return null;
       }
     },
-    components: {
-      async load() {
-        return {
-          async mount() {}
-        };
-      }
-    },
     services: {
       async call() {
         return null as never;
@@ -709,74 +616,6 @@ export function createMockVisualContext(
       }
     },
     diagnostics: consoleDiagnostics(),
-    ...partial
-  };
-}
-
-export function createMockServiceContext(
-  partial: Partial<ServiceContext> = {}
-): ServiceContext {
-  const registryValues: Record<string, unknown> = {};
-  return {
-    bus: {
-      subscribe() {
-        return () => {};
-      },
-      emit() {}
-    },
-    registry: {
-      get(key) {
-        return (registryValues[key] ?? null) as never;
-      },
-      set(key, value) {
-        registryValues[key] = value;
-      }
-    },
-    storage: {
-      async readText() {
-        return "";
-      },
-      async writeText() {}
-    },
-    services: {
-      async call() {
-        return null as never;
-      }
-    },
-    settings: {
-      get() {
-        return undefined;
-      },
-      all() {
-        return {};
-      }
-    },
-    diagnostics: consoleDiagnostics(),
-    ...partial
-  };
-}
-
-export function createMockConnectorContext(
-  partial: Partial<ConnectorContext> = {}
-): ConnectorContext {
-  return {
-    ...createMockServiceContext(partial),
-    secrets: {
-      get() {
-        return undefined;
-      },
-      configured() {
-        return false;
-      }
-    },
-    async fetch() {
-      return null;
-    },
-    websocket: {
-      async connect() {
-        return null;
-      }
-    },
     ...partial
   };
 }

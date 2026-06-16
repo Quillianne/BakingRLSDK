@@ -13,11 +13,6 @@ const sdkVersion = "1.0.1";
 
 const templates = [
   {
-    id: "fullstack-plugin",
-    label: "Fullstack Plugin Package",
-    description: "Package with visual, component, service, and connector exports."
-  },
-  {
     id: "extension-plugin",
     label: "Trusted Extension Plugin Package",
     description: "Manifest v3 package with an extension host entry and webview contribution."
@@ -35,7 +30,7 @@ const templates = [
 ];
 
 function parseArgs(argv) {
-  const result = { name: "", template: "fullstack-plugin", force: false };
+  const result = { name: "", template: "extension-plugin", force: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--template" || arg === "-t") {

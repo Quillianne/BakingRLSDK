@@ -3,184 +3,184 @@
 .include {docs}
 .doclang {en}
 
-This page is the capability inventory for BakingRL plugin packages. Use it to
-decide what a package should expose, which host APIs it needs, and which
-permissions must appear in `bakingrl.plugin.json`.
-
-The SDK types the authoring contract. The BakingRL host owns installation,
-runtime compatibility, permission enforcement, page and overlay rendering,
-service startup, network access, registry access, and package configuration.
+This page is the capability inventory for current BakingRL trusted v3 plugin
+packages. Use it to decide what a package contributes, which host APIs it
+needs, and which capability metadata belongs in `bakingrl.plugin.json`.
 
 ## Package-Level Contract
 
-Every package is described by `bakingrl.plugin.json`.
+Every current package is described by `bakingrl.plugin.json` with:
 
-Core v2 fields:
+- `schema: "bakingrl.plugin/3"`;
+- `kind: "trusted"`;
+- `compatibility.runtimeApi: "1.0.0"`;
+- `runtime.extensionHost.entry` for package JS activation code;
+- `runtime.sidecars` as an object map of package-local native helpers;
+- `activation.events` such as `onStartup`;
+- `contributes` for commands, services, visuals, views, pages, overlays,
+  webviews, configuration, assets, and schemas;
+- `capabilities.permissions` for bus, registry, network, and storage intent.
 
-- `schema`: must be `bakingrl.plugin/2`.
-- `id`: stable package identity, usually reverse-DNS style.
-- `name`, `version`, and optional `author`: package display and versioning
-  metadata.
-- `compatibility.runtimeApi`: the host runtime API the package targets.
-- `exports`: capabilities provided by the package.
-- `imports`: components and services consumed from other packages.
-- `permissions`: host-mediated access requested by package code.
-- `settings`: package-level settings JSON Schema.
+`contributes` is the only package discovery surface for current packages.
 
-Trusted extension packages use `schema: "bakingrl.plugin/3"` and
-`kind: "trusted"` instead of v2 `exports`. Their runtime surface is declared
-with `runtime.extensionHost.entry`, `activation.events`,
-`runtime.sidecars`, `contributes`, and `capabilities.permissions`.
-The v3 `contributes` object contains maps for `commands`, `services`,
-`visuals`, `views`, `pages`, `overlays`, `webviews`, `configuration`,
-`assets`, and `schemas`.
+## Extension Host
 
-Generated packages also contain Vite inputs, TypeScript source files, package
-helper scripts, and built `dist/` entries that must match the manifest.
+The extension host is the package's Node process. It exports:
 
-## Executable Exports
+```ts
+export async function activate(context) {}
+export async function deactivate() {}
+```
 
-`exports.visuals`
+Use the extension host for long-lived runtime state, orchestration, command
+registration, service registration, sidecar control, diagnostics, and host API
+calls.
 
-Browser ESM modules mounted inside overlays, OBS browser-source layouts, custom
-pages, and private configuration pages. A visual receives a host-owned DOM
-`root`, instance metadata, merged settings, and read-oriented frontend APIs.
-Visuals can subscribe to permitted telemetry or plugin events, read permitted
-registry keys, load components, call permitted services, resolve assets, and
-report diagnostics.
+## Commands
 
-Visuals can also expose an editor contract:
+Declare command metadata in `contributes.commands`, then register handlers in
+`activate(context)`:
 
-- `editor.mount(context)`: optional editor-only setup.
-- `editor.actions(context)`: optional buttons shown by the host editor.
-- `context.editor.emit(eventName, payload)`: injects a local event into that
-  visual instance only.
+```ts
+context.commands.registerCommand("my-package.refresh", async () => {
+  context.logger.info("Refreshing package state.");
+});
+```
 
-Editor events are not published to the live host bus. They are meant for
-showing representative visual states and manual triggers while designing a
-page or layout.
+Commands are useful for developer actions, toolbar actions, future command
+palette entries, and plugin-owned workflow triggers.
 
-`exports.components`
+## Services
 
-Reusable browser DOM fragments loaded by visuals through
-`context.components.load(ref)`. Components are not global UI widgets; they are
-mounted into a root provided by the consuming visual and should treat props as
-untrusted input.
+Declare service metadata in `contributes.services`, then register live methods
+from the extension host:
 
-`exports.services`
+```ts
+context.services.register("state", {
+  snapshot() {
+    return currentState;
+  }
+});
+```
 
-Sandboxed backend modules. Services can subscribe to telemetry and plugin
-events, publish permitted plugin events, read and write permitted registry
-keys, read and write permitted text storage, call permitted services, read
-package settings, and expose RPC methods to visuals or other services.
+Call services with:
 
-Use services for derived state, aggregation, long-lived backend state, and
-runtime coordination that should not live inside one visual instance.
+```ts
+const snapshot = await context.services.call("com.example.package/state", "snapshot");
+```
 
-`exports.connectors`
+The manifest describes each service, but `activate(context)` owns the
+implementation through `context.services.register(...)`.
 
-Backend modules with the service APIs plus host-mediated HTTP, WebSocket, and
-secret access. Connectors are for external systems. They do not expose RPC
-methods directly in the current SDK contract; pair a connector with a service
-when other plugin code needs callable methods.
+## Bus Events
 
-## Declarative Exports
+The bus carries Rocket League telemetry and plugin state.
 
-`exports.pages`
+- Telemetry events keep names such as `UpdateState`, `GoalScored`, and
+  `MatchEnded`.
+- Plugin events should use `plugin.<package-id>.*`.
+- A trusted v3 package can read and publish its own
+  `plugin.<package-id>.*` namespace.
+- Cross-package reads should be declared under
+  `capabilities.permissions.bus.read`.
 
-Importable custom page templates. Importing a page template creates a
-host-owned page that users can edit like any other page. The package does not
-own a route or standalone window.
+```ts
+const dispose = context.bus.subscribe("UpdateState", (event) => {
+  currentState = event.Data;
+});
 
-`exports.layouts`
+context.bus.emit("plugin.com.example.package.state", currentState);
+```
 
-Importable overlay layout templates. Users can route imported layouts to the
-in-game overlay or OBS stream output. Template IDs and item IDs can be rewritten
-during import, so portable behavior must live in package/export references and
-item settings.
+Dispose subscriptions from `deactivate()` or by pushing cleanups into
+`context.subscriptions`.
 
-`exports.configuration`
+## Visuals, Pages, Overlays, And Webviews
 
-One private fixed-size package configuration page opened from package details.
-Its private visuals are not listed in the normal visual picker and should not
-be referenced from public pages or layouts. The host renders configuration
-pages on a `1200x740` canvas and keeps secret fields in host-owned UI.
+Browser UI is declared through `contributes`:
 
-`exports.assets`
+- `visuals`: reusable browser entries mounted inside host-owned pages,
+  overlays, and OBS layouts;
+- `pages`: importable page templates;
+- `overlays`: importable overlay templates or overlay browser entries;
+- `webviews`: plugin-authored browser panels;
+- `configuration`: package configuration surfaces;
+- `assets` and `schemas`: static files and validation metadata.
 
-Package-owned static files. Visuals and components should resolve files through
-`context.assets.url(ref)` instead of using local filesystem paths or assuming
-how the host serves package content.
+Browser code runs in a host-owned surface and communicates with the host through
+the SDK bridge and event bus. It should not assume filesystem paths, global
+routes, or ownership of OBS URLs.
 
-`exports.schemas`
+## Registry And Storage
 
-Package-owned schema files that tools or future host features can inspect.
-Visual instance settings, component props, service methods, and package
-settings already have dedicated manifest fields, so use those fields for
-runtime form and validation surfaces.
+Use registry values for small latest-state snapshots:
 
-## Runtime APIs
+```ts
+await context.registry.set("plugin.com.example.package.state", snapshot);
+const value = await context.registry.get("plugin.com.example.package.state");
+```
 
-Telemetry and plugin bus:
+Use storage for package-owned persistent text files:
 
-- Visuals subscribe with `context.bus.subscribe(eventName, callback)`.
-- Services and connectors can also publish with `context.bus.emit(eventName,
-  payload)`.
-- Rocket League events use their telemetry event names.
-- Package events should use the `plugin.<package-id>.*` namespace and matching
-  permissions.
+```ts
+await context.storage.writeText("plugin://self/history.json", JSON.stringify(history));
+```
 
-Registry:
+Storage is not for secrets.
 
-- Visuals get read-only access through `context.registry.get(key)`.
-- Services and connectors can read and write permitted keys.
-- Registry keys are useful for latest snapshots and small shared runtime state.
+## Settings And Secrets
 
-Storage:
+Top-level `settings` points to a JSON Schema. Non-sensitive values are exposed
+through `context.settings.get(key)` and `context.settings.all()`.
 
-- Services and connectors can read and write permitted text storage URIs such
-  as `plugin://self/state.json`.
-- Storage is for package-owned persistent data, not secrets.
+Secret settings use `x-bakingrl-secret: true`. The host stores them outside the
+package bundle and exposes only host-mediated secret access. Never write secret
+values to bundle files, settings JSON, logs, diagnostics, or tests.
 
-Service RPC:
+## Native Sidecars
 
-- Visuals, services, and connectors call imported or same-package services with
-  `context.services.call(ref, method, input)`.
-- Inputs and outputs should be JSON-compatible because calls cross a
-  host-mediated boundary.
+Rust and native helper code must run as a sidecar process declared in
+`runtime.sidecars`:
 
-Settings and secrets:
+```json
+{
+  "runtime": {
+    "sidecars": {
+      "native-helper": {
+        "command": "sidecars/native-helper/target/release/native-helper",
+        "args": [],
+        "env": {},
+        "platforms": ["darwin", "linux"],
+        "protocol": "jsonrpc-stdio",
+        "activation": "onActivation"
+      }
+    }
+  }
+}
+```
 
-- Visuals receive merged package and instance settings as plain
-  `context.settings`.
-- Services and connectors read package settings through
-  `context.settings.get(key)` and `context.settings.all()`.
-- Secret settings are stored by the host and exposed only to connectors through
-  `context.secrets`.
+The extension host controls sidecars:
 
-Diagnostics:
+```ts
+await context.sidecars.start("native-helper");
+const result = await context.sidecars.call("native-helper", "ping", {});
+await context.sidecars.stop("native-helper");
+```
 
-- Contexts expose `diagnostics.log`, `diagnostics.warn`, and
-  `diagnostics.error`.
-- Prefer diagnostics over ad hoc logging in package runtime code.
+Sidecars should speak JSON-RPC 2.0 over stdio. Logs should go to stderr.
 
-## Editor And Preview Surfaces
+## Diagnostics
 
-The editor has two distinct modes.
+Use diagnostics for runtime visibility:
 
-Editor mode mounts visuals with `context.mode === "editor"`. A visual can
-provide a representative default state, and editor actions can trigger local
-events such as goal, overtime, or victory. This mode is purely visual. It must
-not be used as a replacement for backend services or real runtime data flow.
+```ts
+context.diagnostics.info("state updated", { count });
+context.diagnostics.warn("missing optional setting");
+context.diagnostics.error("sidecar call failed", { reason });
+```
 
-Preview mode mounts the same visual through its normal runtime behavior. It is
-the mode to use when checking the complete chain: backend services, permitted
-bus reads and publishes, registry snapshots, service RPC, settings, and real
-host runtime behavior.
-
-For event-driven animation visuals, prefer no automatic editor trigger on
-mount. Show an idle or default state first, then expose explicit editor actions
-for the states authors need to inspect.
+Diagnostics should identify the failing package, runtime phase, source
+(`extensionHost`, `sidecar`, `webview`, etc.), severity, and useful details.
 
 ## Packaging And Distribution
 
@@ -194,11 +194,7 @@ npm run pack
 npm run install:local
 ```
 
-`validate` checks manifest shape, runtime API compatibility, package settings
-schemas, built entries, page and layout template paths, configuration page
-paths, and local package boundaries.
-
-`pack` writes package hashes and a `.brlp` archive. Signed packages can also
-include `signature.ed25519`. Signing and marketplace metadata help distribution
-integrity, but plugin code remains untrusted and host-enforced permissions
-remain the runtime boundary.
+`validate` checks manifest shape, runtime API compatibility, built entries,
+sidecar declarations, contribution paths, schemas, settings, and local package
+boundaries. `pack` creates a `.brlp` archive with optional hashes and
+signatures.

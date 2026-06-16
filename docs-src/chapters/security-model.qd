@@ -1,62 +1,82 @@
-.docname {Security Model}
+.docname {Plugin Trust And Safety}
 .docauthor {BakingRL}
 .include {docs}
 .doclang {en}
 
-BakingRL uses a host-enforced permission model. Plugin code is not trusted.
+BakingRL v3 plugins are trusted extensions. The host does not try to provide a
+strict sandbox around plugin code. Instead, it provides operational safety:
+manifest review, visible capabilities, process supervision, diagnostics, safe
+mode, and local control over stop/restart/disable.
 
 ## Host Authority
 
-The Rust host owns:
+The Rust/Tauri host owns:
 
 - package installation and bundle extraction;
-- manifest parsing and effective permissions;
-- runtime API compatibility decisions;
-- telemetry ingestion;
-- registry reads and writes;
-- service RPC;
-- component imports;
-- network access for connectors;
-- storage access.
+- manifest parsing and runtime compatibility decisions;
+- package enable state and safe mode;
+- page, overlay, OBS, and window routing;
+- event bus and registry access checks;
+- extension host and sidecar supervision;
+- diagnostics and crash-loop detection.
 
-SDK helpers improve authoring ergonomics but are not a security boundary.
+Plugin JavaScript runs outside the Tauri process in a Node extension host.
+Plugin Rust or native code runs outside the Tauri process as a JSON-RPC stdio
+sidecar. Native plugin code must not be loaded into the host binary.
 
-## Package Boundaries
+## Capabilities
 
-Packages cannot import each other directly. Cross-package access must go through
-host-mediated imports and permissions.
+`capabilities.permissions` documents what the package intends to use:
 
-Examples:
+- bus read and publish namespaces;
+- registry read and write namespaces;
+- storage paths;
+- network targets;
+- secrets, telemetry, OBS, and native sidecar usage.
 
-- A visual loads a component with `context.components.load("package/export")`.
-- A visual calls a service with `context.services.call("package/service", method, input)`.
-- A service writes only under permitted `plugin.<package-id>.*` registry keys.
-- A connector can call only declared HTTP or WebSocket hosts.
-- A private configuration visual can render only inside its package
-  configuration page.
+The host can reject obvious out-of-scope bus and registry access, but
+capabilities are not a complete security sandbox. They exist so operators,
+diagnostics, and marketplace metadata can answer: what does this package want
+to do, and does that match the trust decision?
+
+## Safe Mode
+
+Safe mode starts BakingRL without executing plugin code. In safe mode the host
+does not start extension hosts, native sidecars, plugin services, plugin pages,
+plugin overlays, plugin webviews, or plugin visuals.
+
+Use safe mode when a package blocks startup, crashes repeatedly, or renders
+broken UI.
+
+## Diagnostics And Crash Loops
+
+Plugin stdout, stderr, activation failures, JSON-RPC failures, service errors,
+sidecar failures, and host runtime errors should become package-scoped
+diagnostics.
+
+Repeated crashes in a short window are promoted to fatal diagnostics and
+restarts are blocked until the operator intervenes. This keeps one broken
+package from restarting forever in the background.
 
 ## Bundle Safety
 
-The host rejects bundles with:
+The helper CLI and host inspect package archives for operational safety:
 
-- absolute paths;
-- `../` path traversal;
-- symlinks;
-- oversized files;
-- oversized total uncompressed size;
-- hash mismatches;
-- invalid Ed25519 signatures.
+- required `bakingrl.plugin.json`;
+- package-relative paths only;
+- no `../` path traversal;
+- supported schema and runtime API range;
+- declared build entries and sidecar commands exist;
+- optional hash and signature files match the artifact.
 
-## Trust State
+Hashes and signatures help establish package provenance. They do not make code
+safe by themselves.
 
-Hash and signature files are package metadata. They help the host and future
-marketplace reason about integrity, but they do not make plugin code trusted.
-Remote trust policy belongs to the BakingRL host and marketplace design, not to
-plugin packages.
+## Author Guidance
 
-## Practical Guidance
-
-- Request the smallest permission set possible.
-- Keep secrets outside package source.
-- Treat all telemetry and settings input as untrusted.
-- Prefer explicit service methods over broad registry writes.
+- Keep sidecars package-local and talk to them through JSON-RPC stdio.
+- Namespace package events and registry keys under `plugin.<package-id>.*`.
+- Declare cross-package reads explicitly in `capabilities.permissions`.
+- Implement `deactivate()` and dispose subscriptions.
+- Report failures through `context.diagnostics` or `context.logger`.
+- Never store secrets in source, bundles, logs, settings JSON, or fixtures.

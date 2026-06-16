@@ -7,7 +7,6 @@
     "check": "tsc --noEmit",
     "validate": "node scripts/bakingrl-plugin.mjs validate",
     "doctor": "node scripts/bakingrl-plugin.mjs doctor",
-    "migrate:v2": "node scripts/bakingrl-plugin.mjs migrate-v2",
     "validate:listing": "node scripts/bakingrl-plugin.mjs validate-listing",
     "pack": "node scripts/bakingrl-plugin.mjs pack",
     "release:metadata": "node scripts/bakingrl-plugin.mjs release-metadata",
