@@ -3,11 +3,11 @@
 .include {docs}
 .doclang {en}
 
-This guide turns the capability model into practical authoring rules. The goal
+This guide turns the V4 runtime model into practical authoring rules. The goal
 is to keep packages predictable in the host editor, safe at runtime, and easy
 to maintain as the runtime API evolves.
 
-## Choose The Right Capability
+## Choose The Right Surface
 
 Use a visual for DOM rendering, animation, and frontend composition. A visual
 can react to telemetry, settings, service results, and registry snapshots, but
@@ -25,9 +25,9 @@ Use page and overlay templates to give users a starting point. Keep templates
 portable by relying on package contribution references and item settings rather
 than specific template IDs.
 
-Use a private configuration page only for package-specific workflows that need
-more than generated settings fields. Leave secrets in the host-owned settings
-UI.
+Use host-owned settings for package configuration. `settings.ui` is not
+supported in V4, and custom configuration visuals are reserved for a later
+settings contract. Leave secrets in the host-owned settings UI.
 
 ## Design The Runtime Data Flow
 
@@ -71,7 +71,7 @@ victory, or replay states intentionally.
 
 Use preview mode when the question is whether the real chain works. Preview
 should exercise the normal visual mount path, service calls, backend-derived
-state, registry reads, and real host event permissions.
+state, registry reads, and host-mediated event access.
 
 ## Render Inside The Host Box
 
@@ -92,10 +92,10 @@ normal refresh mechanism.
 Do not position content against the viewport, mutate DOM outside
 `context.root`, or depend on editor reloads to apply visual changes.
 
-## Keep Permissions Narrow
+## Keep Access Narrow
 
-Request only the events, registry keys, network hosts, and storage paths the
-package needs.
+Use only the events, registry keys, network hosts, and storage paths the package
+needs.
 
 Use package-scoped names:
 
@@ -118,12 +118,13 @@ Keep the manifest, Vite inputs, source files, and generated `dist/` entries in
 sync. Add new contributions to `contributes`, export runtime services from the
 extension host, and rebuild before validation.
 
-Declare `compatibility.runtimeApi` explicitly and rebuild packages when the
-runtime API changes. Do not rely on SDK version alone for compatibility.
+Declare `bakingrlApi` explicitly and rebuild packages when the contract changes.
+Do not rely on SDK version alone for compatibility.
 
 Use `npm run validate` before packing or installing locally. Use
-`bakingrl-plugin inspect` when you want to review the manifest surface and
-effective permissions the host will see.
+`bakingrl-plugin inspect` when you want to review the manifest surface the
+host will enforce.
 
-Document package-owned events, registry keys, settings, and permissions in the
-package README. That keeps marketplace review and host debugging tractable.
+Document package-owned events, registry keys, cross-package usage choices, and
+settings in the package README. That keeps marketplace review and host debugging
+tractable.

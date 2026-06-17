@@ -3,10 +3,10 @@
 .include {docs}
 .doclang {en}
 
-BakingRL v3 plugins are trusted extensions. The host does not try to provide a
+BakingRL v4 plugins are trusted extensions. The host does not try to provide a
 strict sandbox around plugin code. Instead, it provides operational safety:
-manifest review, visible capabilities, process supervision, diagnostics, safe
-mode, and local control over stop/restart/disable.
+manifest review, visible contribution metadata, process supervision,
+diagnostics, safe mode, and local control over stop/restart/disable.
 
 ## Host Authority
 
@@ -15,7 +15,8 @@ The Rust/Tauri host owns:
 - package installation and bundle extraction;
 - manifest parsing and runtime compatibility decisions;
 - package enable state and safe mode;
-- page, overlay, OBS, and window routing;
+- page, overlay, and window routing;
+- the OBS gateway that serves package-owned OBS browser surfaces;
 - event bus and registry access checks;
 - extension host and sidecar supervision;
 - diagnostics and crash-loop detection.
@@ -24,20 +25,16 @@ Plugin JavaScript runs outside the Tauri process in a Node extension host.
 Plugin Rust or native code runs outside the Tauri process as a JSON-RPC stdio
 sidecar. Native plugin code must not be loaded into the host binary.
 
-## Capabilities
+## Runtime Boundaries
 
-`capabilities.permissions` documents what the package intends to use:
+The manifest does not carry an access grant block in V4. Host-managed metadata
+still records what the package contributes and which runtime surfaces it uses.
+The host can reject obvious out-of-scope bus, registry, storage, and sidecar
+access, but access is enforced as host policy rather than as a strict manifest
+sandbox.
 
-- bus read and publish namespaces;
-- registry read and write namespaces;
-- storage paths;
-- network targets;
-- secrets, telemetry, OBS, and native sidecar usage.
-
-The host can reject obvious out-of-scope bus and registry access, but
-capabilities are not a complete security sandbox. They exist so operators,
-diagnostics, and marketplace metadata can answer: what does this package want
-to do, and does that match the trust decision?
+`settings.ui`, `externalSurfaces.web`, and `externalSurfaces.remote` are not
+supported runtime surfaces in V4.
 
 ## Safe Mode
 
@@ -65,7 +62,7 @@ The helper CLI and host inspect package archives for operational safety:
 - required `bakingrl.plugin.json`;
 - package-relative paths only;
 - no `../` path traversal;
-- supported schema and runtime API range;
+- supported schema and exact `bakingrlApi: "2.0.0"`;
 - declared build entries and sidecar commands exist;
 - optional hash and signature files match the artifact.
 
@@ -76,7 +73,8 @@ safe by themselves.
 
 - Keep sidecars package-local and talk to them through JSON-RPC stdio.
 - Namespace package events and registry keys under `plugin.<package-id>.*`.
-- Declare cross-package reads explicitly in `capabilities.permissions`.
+- Keep cross-package reads and writes explicit in package design; the host applies
+  access policy at runtime.
 - Implement `deactivate()` and dispose subscriptions.
 - Report failures through `context.diagnostics` or `context.logger`.
 - Never store secrets in source, bundles, logs, settings JSON, or fixtures.

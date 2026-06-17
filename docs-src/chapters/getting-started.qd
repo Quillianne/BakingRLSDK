@@ -24,8 +24,8 @@ npm run build
 npm run validate
 ```
 
-The default template creates a trusted v3 package with an extension host entry
-and a webview contribution.
+The default template creates a trusted v4 package with a `runtime.node` entry
+and V4 contribution metadata.
 
 Other templates:
 
@@ -59,14 +59,14 @@ Set `BAKINGRL_PACKAGES_DIR` to override the target during development.
 1. Start BakingRL from the host repository.
 2. Open the Packages or Developer area.
 3. Enable the package.
-4. Open contributed pages, webviews, or overlays.
+4. Open contributed visuals or host-owned settings.
 5. Add contributed visuals to an overlay/editor layout.
 6. Use diagnostics, logs, and runtime restart controls when testing crashes or
    activation behavior.
 
 ## Next Steps
 
-- [Plugin Capabilities](plugin-capabilities.qd)
+- [Runtime Surfaces](runtime-surfaces.qd)
 - [Authoring Workflows](authoring-workflows.qd)
 - [SDK API](sdk-api.qd)
 - [Package CLI](package-cli.qd)

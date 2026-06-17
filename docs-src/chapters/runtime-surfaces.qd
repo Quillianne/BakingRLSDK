@@ -1,27 +1,28 @@
-.docname {Plugin Capabilities}
+.docname {Runtime Surfaces}
 .docauthor {BakingRL}
 .include {docs}
 .doclang {en}
 
-This page is the capability inventory for current BakingRL trusted v3 plugin
-packages. Use it to decide what a package contributes, which host APIs it
-needs, and which capability metadata belongs in `bakingrl.plugin.json`.
+This page describes the current BakingRL trusted V4 runtime surfaces. Use it to
+decide what a package contributes, which host APIs it uses, and which
+declarative metadata belongs in `bakingrl.plugin.json`.
 
 ## Package-Level Contract
 
 Every current package is described by `bakingrl.plugin.json` with:
 
-- `schema: "bakingrl.plugin/3"`;
-- `kind: "trusted"`;
-- `compatibility.runtimeApi: "1.0.0"`;
-- `runtime.extensionHost.entry` for package JS activation code;
-- `runtime.sidecars` as an object map of package-local native helpers;
-- `activation.events` such as `onStartup`;
-- `contributes` for commands, services, visuals, views, pages, overlays,
-  webviews, configuration, assets, and schemas;
-- `capabilities.permissions` for bus, registry, network, and storage intent.
+- `schemaVersion: "bakingrl.plugin/4"`;
+- `bakingrlApi: "2.0.0"`;
+- `runtime.node.entry` for package JS activation code;
+- `runtime.sidecars` as first-class package-local native helpers;
+- `contributes` for commands, services, visuals, settings, and other supported
+  host surfaces.
 
 `contributes` is the only package discovery surface for current packages.
+
+V4 does not publish a manifest-level access grant contract. The host remains
+the runtime boundary for mediated APIs, and package code is checked through host
+policy on each API call path.
 
 ## Extension Host
 
@@ -79,10 +80,9 @@ The bus carries Rocket League telemetry and plugin state.
 - Telemetry events keep names such as `UpdateState`, `GoalScored`, and
   `MatchEnded`.
 - Plugin events should use `plugin.<package-id>.*`.
-- A trusted v3 package can read and publish its own
+- A trusted v4 package can read and publish its own
   `plugin.<package-id>.*` namespace.
-- Cross-package reads should be declared under
-  `capabilities.permissions.bus.read`.
+- Cross-package reads are host-mediated and must pass host policy checks at runtime.
 
 ```ts
 const dispose = context.bus.subscribe("UpdateState", (event) => {
@@ -95,21 +95,19 @@ context.bus.emit("plugin.com.example.package.state", currentState);
 Dispose subscriptions from `deactivate()` or by pushing cleanups into
 `context.subscriptions`.
 
-## Visuals, Pages, Overlays, And Webviews
+## Visuals, Pages, Overlays, And OBS
 
 Browser UI is declared through `contributes`:
 
 - `visuals`: reusable browser entries mounted inside host-owned pages,
-  overlays, and OBS layouts;
-- `pages`: importable page templates;
-- `overlays`: importable overlay templates or overlay browser entries;
-- `webviews`: plugin-authored browser panels;
-- `configuration`: package configuration surfaces;
-- `assets` and `schemas`: static files and validation metadata.
+  overlays, and layouts;
+- `externalSurfaces.obs`: package-owned OBS browser surfaces served through the
+  host OBS gateway.
 
-Browser code runs in a host-owned surface and communicates with the host through
-the SDK bridge and event bus. It should not assume filesystem paths, global
-routes, or ownership of OBS URLs.
+Browser code runs inside a host-rendered container and communicates with the
+host through the SDK bridge and event bus. It should not assume filesystem paths
+or global routes. OBS surface identifiers and browser entries are owned by the
+package; the host gateway only supervises and serves them.
 
 ## Registry And Storage
 
@@ -130,12 +128,17 @@ Storage is not for secrets.
 
 ## Settings And Secrets
 
-Top-level `settings` points to a JSON Schema. Non-sensitive values are exposed
-through `context.settings.get(key)` and `context.settings.all()`.
+`contributes.settings` points to a JSON schema block for host-owned settings.
+Non-sensitive values are exposed through `context.settings.get(key)` and
+`context.settings.all()`.
 
 Secret settings use `x-bakingrl-secret: true`. The host stores them outside the
 package bundle and exposes only host-mediated secret access. Never write secret
 values to bundle files, settings JSON, logs, diagnostics, or tests.
+
+`settings.ui` is not supported in V4. Custom browser settings panels are
+reserved for a later runtime contract and should be rejected by current hosts
+and helper validation.
 
 ## Native Sidecars
 
@@ -145,16 +148,17 @@ Rust and native helper code must run as a sidecar process declared in
 ```json
 {
   "runtime": {
-    "sidecars": {
-      "native-helper": {
-        "command": "sidecars/native-helper/target/release/native-helper",
+    "sidecars": [
+      {
+        "id": "native-helper",
+        "bin": "sidecars/native-helper/target/release/native-helper",
         "args": [],
         "env": {},
-        "platforms": ["darwin", "linux"],
+        "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
         "protocol": "jsonrpc-stdio",
-        "activation": "onActivation"
+        "activation": "onEnable"
       }
-    }
+    ]
   }
 }
 ```
@@ -194,7 +198,7 @@ npm run pack
 npm run install:local
 ```
 
-`validate` checks manifest shape, runtime API compatibility, built entries,
+`validate` checks manifest shape, exact `bakingrlApi: "2.0.0"`, built entries,
 sidecar declarations, contribution paths, schemas, settings, and local package
 boundaries. `pack` creates a `.brlp` archive with optional hashes and
 signatures.

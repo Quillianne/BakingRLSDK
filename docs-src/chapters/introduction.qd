@@ -14,28 +14,26 @@ This documentation is for plugin authors. The desktop host lives in the
 
 Current packages use:
 
-- manifest schema `bakingrl.plugin/3`;
-- `kind: "trusted"`;
-- runtime API `1.0.0`;
-- SDK package version `1.0.3`;
-- one JavaScript extension host entry per package;
-- browser visuals, pages, overlays, views, and webviews declared through
+- manifest schema `bakingrl.plugin/4`;
+- exact `bakingrlApi: "2.0.0"`;
+- SDK package version `2.0.0`;
+- one JavaScript extension host entry per package in `runtime.node`;
+- browser visuals and host-owned settings metadata declared through
   `contributes`;
-- optional package-local native sidecars using JSON-RPC stdio.
+- first-class package-local native sidecars using JSON-RPC stdio.
 
 Services are registered from `activate(context)`. The manifest declares service
 metadata for discovery, diagnostics, marketplace review, and UI inspection.
 
 ## What You Can Build
 
-A trusted v3 package can contribute:
+A trusted v4 package can contribute:
 
 - commands;
 - services;
 - browser visuals;
-- pages, overlays, views, and webviews;
-- host-owned configuration schemas;
-- static assets and JSON schemas;
+- settings metadata and host-owned configuration schemas;
+- static assets where supported;
 - native sidecars supervised by the host.
 
 The extension host context gives package code access to commands, services,
@@ -53,10 +51,10 @@ docs-site/                        Generated documentation output
 
 ## Compatibility
 
-This SDK targets only `bakingrl.plugin/3`. Current BakingRL hosts support
-runtime API range `>=1.0.0 <2.0.0`.
+This SDK targets only `bakingrl.plugin/4` with exact
+`bakingrlApi: "2.0.0"` for the current V4 runtime contract.
 
 Use [Plugin Package Format](plugin-package-format.qd) for the manifest
-contract, [Plugin Capabilities](plugin-capabilities.qd) for runtime surfaces,
+contract, [Runtime Surfaces](runtime-surfaces.qd) for host APIs,
 and [Package CLI](package-cli.qd) for validation, packing, signing, inspection,
 and local installation.

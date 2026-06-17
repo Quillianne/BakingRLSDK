@@ -9,16 +9,16 @@ plugins, use the `BakingRLPlugins` repository.
 
 ## What You Can Build
 
-A BakingRL plugin package can expose one or more capabilities:
+A BakingRL plugin package can expose one or more runtime surfaces:
 
 - A Node extension host with `activate(context)` and `deactivate()`.
 - Commands and services registered from extension host code.
 - Browser visuals rendered in overlays, OBS browser sources, pages, and
   webviews.
 - Page and overlay templates that users can import into BakingRL.
-- Native Rust or system sidecars supervised over JSON-RPC stdio.
+- First-class native Rust or system sidecars supervised over JSON-RPC stdio.
 - Host-rendered package settings, secret metadata, assets, schemas,
-  diagnostics, and capability declarations.
+  diagnostics, and host-managed render surfaces.
 
 ## Repository Layout
 
@@ -64,7 +64,7 @@ npm run pack
 Published scaffolds use the published SDK package:
 
 ```json
-"@bakingrl/plugin-sdk": "^1.0.1"
+"@bakingrl/plugin-sdk": "^2.0.0"
 ```
 
 ## Local Global Install
@@ -144,6 +144,6 @@ npm run docs:dev
 
 ## Compatibility
 
-This SDK targets BakingRL plugin package schema `bakingrl.plugin/3`, SDK
-version `1.0.1`, and runtime API `1.0.0`. Current BakingRL hosts support
-runtime API range `>=1.0.0 <2.0.0`.
+This SDK targets BakingRL plugin package schema `bakingrl.plugin/4`, SDK
+version `2.0.0`, and exact `bakingrlApi: "2.0.0"` for the current V4 runtime
+contract.

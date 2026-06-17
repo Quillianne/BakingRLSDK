@@ -3,13 +3,14 @@
 .include {docs}
 .doclang {en}
 
-The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v3 plugin
-contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/3`,
-SDK `1.0.3`, runtime API `1.0.0`.
+The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v4 plugin
+contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/4`,
+SDK `2.0.0`, and exact `bakingrlApi: "2.0.0"`.
 
 The SDK is an authoring contract. Runtime behavior is provided by the host:
 package loading, extension host supervision, bridge calls, service routing,
-sidecars, storage, secrets, diagnostics, overlays, and OBS rendering.
+first-class sidecars, storage, secrets, diagnostics, overlays, host-owned pages
+and windows, and the OBS gateway for package-owned OBS browser surfaces.
 
 ## Import Surface
 
@@ -17,15 +18,13 @@ sidecars, storage, secrets, diagnostics, overlays, and OBS rendering.
 import {
   SDK_VERSION,
   RUNTIME_API_VERSION,
-  SUPPORTED_RUNTIME_API_RANGE,
-  currentCompatibility,
   defineExtension,
   defineVisual,
   createCleanup,
   createMockVisualContext,
   createWebviewBridge,
   type ExtensionContext,
-  type PluginManifestV3,
+  type PluginManifestV4,
   type VisualContext,
   type WebviewBridge
 } from "@bakingrl/plugin-sdk";
@@ -36,15 +35,15 @@ types from `@bakingrl/plugin-sdk/telemetry`.
 
 ## Extension Host
 
-Each trusted plugin declares one JavaScript extension entry:
+Each trusted package declares one JavaScript extension entry:
 
 ```json
 {
   "runtime": {
-    "extensionHost": {
+    "node": {
       "entry": "dist/extension/index.js"
     },
-    "sidecars": {}
+    "sidecars": []
   }
 }
 ```
@@ -115,11 +114,11 @@ export default defineVisual({
 item rectangle, visual settings, editor mode, bus subscription, registry reads,
 service calls, asset URL resolution, and diagnostics.
 
-## Webviews
+## Browser Bridge
 
-Pages, overlays, views, and custom webviews are browser assets declared through
-`contributes.pages`, `contributes.overlays`, `contributes.views`, or
-`contributes.webviews`. They communicate with the host through `postMessage`.
+Browser visuals use the SDK bridge when they need structured communication with
+the host-rendered container. They communicate with the host through
+`postMessage`.
 
 ```ts
 import { createWebviewBridge } from "@bakingrl/plugin-sdk";
@@ -136,14 +135,16 @@ const bridge = createWebviewBridge({
 });
 ```
 
-The host owns windowing and OBS routes. Plugin webviews should stay portable and
-only depend on the bridge and packaged assets.
+The host owns windowing. Packages own declared OBS browser surfaces through
+`externalSurfaces.obs`; the host OBS gateway serves and supervises those
+surfaces. Browser entries should stay portable and only depend on the bridge and
+packaged assets.
 
 ## Sidecars
 
 Native code is not loaded into the Tauri process. Rust or other native helpers
-are package-local sidecar binaries declared in `runtime.sidecars` and controlled
-from `context.sidecars`.
+are first-class package-local sidecar binaries declared in `runtime.sidecars`
+and controlled from `context.sidecars`.
 
 ```ts
 const result = await context.sidecars.call("nativeHelper", "ping", {
@@ -155,7 +156,10 @@ The current protocol is JSON-RPC 2.0 over newline-delimited stdio.
 
 ## Utilities
 
-`currentCompatibility()` returns `{ runtimeApi: "1.0.0", sdk: "1.0.3" }`.
+`SDK_VERSION` is `2.0.0`.
+
+`RUNTIME_API_VERSION` is `2.0.0`, matching the manifest value
+`bakingrlApi: "2.0.0"`.
 
 `setting(settings, key, fallback)` reads a typed value with a fallback.
 

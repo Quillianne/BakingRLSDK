@@ -4,126 +4,87 @@
 .doclang {en}
 
 BakingRL packages are described by `bakingrl.plugin.json`. Current packages use
-`schema: "bakingrl.plugin/3"` and `kind: "trusted"`.
+`schemaVersion: "bakingrl.plugin/4"` and are trusted host-managed packages.
 
-## Minimal Trusted V3 Manifest
+## Minimal Trusted V4 Manifest
 
 ```json
 {
-  "schema": "bakingrl.plugin/3",
-  "kind": "trusted",
+  "schemaVersion": "bakingrl.plugin/4",
   "id": "com.example.extension",
   "name": "Example Extension",
   "version": "1.0.0",
-  "compatibility": {
-    "runtimeApi": "1.0.0",
-    "sdk": "1.0.3"
-  },
+  "bakingrlApi": "2.0.0",
   "runtime": {
-    "extensionHost": {
+    "node": {
       "entry": "dist/extension/index.js"
     },
-    "sidecars": {}
-  },
-  "activation": {
-    "events": ["onStartup"]
+    "sidecars": []
   },
   "contributes": {
-    "commands": {},
-    "services": {},
-    "visuals": {},
-    "views": {},
-    "pages": {},
-    "overlays": {},
-    "webviews": {},
-    "configuration": {},
-    "assets": {},
-    "schemas": {}
-  },
-  "capabilities": {
-    "permissions": {
-      "bus": {
-        "read": [],
-        "publish": ["plugin.com.example.extension.*"]
-      },
-      "registry": {
-        "read": [],
-        "write": ["plugin.com.example.extension.*"]
-      },
-      "network": {
-        "http": [],
-        "websocket": []
-      },
-      "storage": ["plugin://self/*"]
+    "commands": [],
+    "services": [],
+    "visuals": [],
+    "settings": {
+      "schema": "schemas/settings.json"
     }
-  },
-  "diagnostics": {
-    "enabled": true
   }
 }
 ```
 
 ## Top-Level Fields
 
-`schema`
+`schemaVersion`
 
-Must be `bakingrl.plugin/3` for current packages.
+Must be `bakingrl.plugin/4` for current packages.
 
-`kind`
+`bakingrlApi`
 
-Must be `trusted`.
+Top-level contract version. Must be exact `2.0.0` for the current V4 runtime
+contract.
 
 `id`
 
 Stable package identity. Use reverse-DNS style values such as
 `com.example.scoreboard`. Do not use the reserved `plugin.` runtime prefix.
 
-`compatibility`
+`name` and `version`
 
-Runtime compatibility declaration. `runtimeApi` is required and currently
-targets `1.0.0`. `sdk` should record the helper package version used to build
-the package.
+Standard package metadata.
 
 `runtime`
 
-Declares executable runtime entries. `runtime.extensionHost.entry` is the built
-ESM file loaded by the Node extension host. `runtime.sidecars` is an object map
-of package-local helper processes.
-
-`activation`
-
-Declares events that can start the extension host, such as `onStartup`.
+Declares executable runtime entries. `runtime.node.entry` is the built entry for
+the Node extension host. `runtime.sidecars` is a first-class array of
+package-local helper processes declared with JSON-RPC stdio.
 
 `contributes`
 
 Declarative package surface used for discovery, descriptors, runtime startup,
 and UI.
 
-`capabilities`
+`contributes.settings`
 
-Visible capability metadata and lightweight host guard declarations. Detailed
-bus, registry, network, and storage scopes live under
-`capabilities.permissions`.
+Optional package-level schema for settings. This is metadata only; plugin settings
+values are surfaced through host-managed settings and secrets APIs.
 
-`settings`
+`externalSurfaces`
 
-Optional package-level JSON Schema path for non-secret settings and secret
-metadata.
+Optional host-facing integration points. The current supported declaration is
+`externalSurfaces.obs` for package-owned OBS browser surfaces served through the
+host OBS gateway.
+
+`settings.ui`, `externalSurfaces.web`, and `externalSurfaces.remote` are not
+supported in V4 and should be rejected by current hosts and helper validation.
 
 ## Contributes
 
-`contributes` contains maps for:
+`contributes` contains arrays and objects for:
 
 - `commands`: command IDs and display metadata;
 - `services`: service metadata and method schemas;
 - `visuals`: browser entries mounted by host pages and overlays;
-- `views`: future host-owned view surfaces;
-- `pages`: page templates or page browser entries;
-- `overlays`: overlay templates or overlay browser entries;
-- `webviews`: plugin-authored browser panels;
-- `configuration`: configuration UI and schema metadata;
-- `assets`: static files;
-- `schemas`: package-owned schemas.
+- `settings`: optional settings metadata.
 
 Services are discovered from the manifest, but live implementations are
 registered from extension host code:
@@ -171,37 +132,38 @@ plugin.com.example.scoreboard.state
 plugin.com.example.scoreboard.sequence
 ```
 
-Declare cross-package reads explicitly in `capabilities.permissions.bus.read`
-or `capabilities.permissions.registry.read`.
+Cross-package reads and writes are mediated by host policy; the manifest does
+not declare per-surface access grants.
 
 ## Sidecars
 
-Sidecars are declared as an object map:
+Sidecars are declared in an array:
 
 ```json
 {
   "runtime": {
-    "sidecars": {
-      "native-helper": {
-        "command": "sidecars/native-helper/target/release/native-helper",
+    "sidecars": [
+      {
+        "id": "native-helper",
+        "bin": "sidecars/native-helper/target/release/native-helper",
         "args": [],
         "env": {},
-        "platforms": ["darwin", "linux"],
+        "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
         "protocol": "jsonrpc-stdio",
-        "activation": "onActivation"
+        "activation": "onEnable"
       }
-    }
+    ]
   }
 }
 ```
 
-`command` is package-relative. `protocol` is currently `jsonrpc-stdio`.
-Activation can be `manual`, `onActivation`, or `onStartup`.
+`bin` is package-relative. `protocol` is currently `jsonrpc-stdio`.
+Activation can be `manual`, `onEnable`, or `onStartup`.
 
 ## Settings And Secrets
 
-Package-level `settings` points to a JSON Schema. Non-sensitive values are
-exposed through `context.settings`.
+`contributes.settings` points to a JSON schema for host-owned settings.
+Non-sensitive values are exposed through `context.settings`.
 
 Secret fields must be string properties with `x-bakingrl-secret: true`.
 Secrets must not declare defaults. BakingRL stores them outside the package
@@ -254,5 +216,5 @@ npm run pack -- --sign signing-key.json
 ```
 
 The host inspects archives before installation and should reject unsafe paths,
-unsupported schemas, runtime-incompatible packages, hash mismatches, and
-invalid signatures.
+unsupported schemas, packages without exact `bakingrlApi: "2.0.0"`, unsupported
+V4 fields, hash mismatches, and invalid signatures.

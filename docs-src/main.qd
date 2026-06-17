@@ -10,24 +10,24 @@ This site is generated as a multi-page Quarkdown documentation site. Use the
 left navigation to move between sections and the right navigation for the table
 of contents of the current page.
 
-The current SDK version is `1.0.3`. Generated packages declare runtime API
-`1.0.0`, and current BakingRL hosts support `>=1.0.0 <2.0.0`.
+The current SDK version is `2.0.0`. Generated packages declare
+`bakingrlApi: "2.0.0"` for the current V4 runtime contract.
 
 ## Start Here
 
 - [Introduction](chapters/introduction.qd): repository purpose, plugin
-  capabilities, and compatibility.
+  model, and runtime contract.
 - [Getting Started](chapters/getting-started.qd): local SDK install, package
   creation, and the development loop.
-- [Plugin Capabilities](chapters/plugin-capabilities.qd): everything a package
-  can expose, consume, and request from the host.
+- [Runtime Surfaces](chapters/runtime-surfaces.qd): everything a package can
+  expose, consume, and access through host-mediated APIs.
 - [Plugin Best Practices](chapters/plugin-best-practices.qd): guidance for
-  choosing capabilities, data flow, editor states, preview, permissions, and
+  choosing runtime surfaces, data flow, editor states, preview, and
   packaging.
 - [Authoring Workflows](chapters/authoring-workflows.qd): extension host,
   visual, webview, overlay, service, and sidecar authoring patterns.
 - [SDK API](chapters/sdk-api.qd): TypeScript helpers and runtime contexts.
-- [Plugin Package Format](chapters/plugin-package-format.qd): manifest v3
+- [Plugin Package Format](chapters/plugin-package-format.qd): manifest v4
   schema, contribution maps, sidecars, and bundle structure.
 - [Package CLI](chapters/package-cli.qd): generator and package helper commands.
 - [Security Model](chapters/security-model.qd): trusted plugin operations,
@@ -40,4 +40,5 @@ The current SDK version is `1.0.3`. Generated packages declare runtime API
 The SDK owns plugin authoring contracts, templates, helper CLI behavior, and
 manifest type definitions. The host application owns runtime supervision,
 package installation, runtime checks, page rendering, overlays, and OBS gateway
-behavior.
+behavior. Plugin packages own their declared OBS browser surfaces; the host
+gateway serves and supervises them.

@@ -15,7 +15,7 @@ _setup.qd
 chapters/
   introduction.qd
   getting-started.qd
-  plugin-capabilities.qd
+  runtime-surfaces.qd
   plugin-best-practices.qd
   authoring-workflows.qd
   sdk-api.qd

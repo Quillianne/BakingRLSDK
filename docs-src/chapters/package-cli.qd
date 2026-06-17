@@ -5,9 +5,9 @@
 
 `@bakingrl/create-plugin` provides two commands:
 
-- `create-bakingrl-plugin` scaffolds trusted v3 packages.
+- `create-bakingrl-plugin` scaffolds trusted v4 packages.
 - `bakingrl-plugin` validates, inspects, packs, signs, and locally installs
-  trusted v3 packages.
+  trusted v4 packages.
 
 ## Templates
 
@@ -24,8 +24,8 @@ Available templates:
 - `native-sidecar-plugin`: extension host entry plus a Rust JSON-RPC stdio
   sidecar.
 
-Generated packages declare `schema: "bakingrl.plugin/3"`, `kind: "trusted"`,
-`compatibility.runtimeApi: "1.0.0"`, and SDK `1.0.3`.
+Generated packages declare `schemaVersion: "bakingrl.plugin/4"`, and
+`bakingrlApi: "2.0.0"`.
 
 ## Validate
 
@@ -35,12 +35,14 @@ bakingrl-plugin validate .
 
 Validation checks:
 
-- manifest schema, id, name, version, kind, compatibility, activation, runtime,
-  contributions, capabilities, settings, diagnostics;
-- built JavaScript entries for extension host, visuals, and webviews;
+- manifest schema, id, name, version, exact `bakingrlApi: "2.0.0"`, runtime,
+  contributes, host-owned settings, and external surfaces;
+- built JavaScript entries for extension host and declared visuals;
 - sidecar command paths and `jsonrpc-stdio` declarations;
-- package-local paths for assets, schemas, settings, pages, overlays, and
-  webviews.
+- package-local paths for declared contribution assets and runtime entries.
+
+Current validation should reject unsupported V4 fields such as `settings.ui`,
+`externalSurfaces.web`, and `externalSurfaces.remote`.
 
 ## Doctor
 
@@ -48,8 +50,8 @@ Validation checks:
 bakingrl-plugin doctor .
 ```
 
-`doctor` prints a JSON summary of runtime API, sidecars, activation events,
-contribution ids, and build entries.
+`doctor` prints a JSON summary of `bakingrlApi`, sidecars, contribution ids,
+and build entries.
 
 ## Inspect
 
@@ -57,9 +59,9 @@ contribution ids, and build entries.
 bakingrl-plugin inspect .
 ```
 
-`inspect` prints the normalized v3 manifest surface used by the host:
-`runtime`, `activation`, `contributes`, `capabilities`, settings, diagnostics,
-and compatibility.
+`inspect` prints the normalized v4 manifest surface used by the host:
+`schemaVersion`, `bakingrlApi`, `runtime`, `contributes`, and
+`externalSurfaces`.
 
 ## Pack
 
@@ -100,6 +102,5 @@ bakingrl-plugin release-metadata . --bundle-url <url> --listing-url <url>
 bakingrl-plugin marketplace-entry . --developer <id> --bundle-url <url> --listing-url <url>
 ```
 
-Marketplace metadata includes runtime API, bundle hash, signature public key,
-review metadata, and effective declared permissions from
-`capabilities.permissions`.
+Marketplace metadata includes `bakingrlApi`, bundle hash, signature public key,
+review metadata, and other host-facing package fields.

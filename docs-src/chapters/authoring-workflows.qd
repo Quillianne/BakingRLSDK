@@ -3,8 +3,9 @@
 .include {docs}
 .doclang {en}
 
-Current BakingRL plugin authoring uses one model: trusted v3 packages with a
-JavaScript extension host, browser assets, and optional native sidecars.
+Current BakingRL plugin authoring uses one model: trusted v4 packages with a
+JavaScript extension host, browser visuals, host-owned settings metadata, and
+first-class native sidecars.
 
 ## Development Loop
 
@@ -19,7 +20,7 @@ npm run install:local
 
 When the package changes, rebuild it and run `npm run install:local` again.
 The host reloads package metadata and starts extension hosts according to the
-manifest activation events.
+enabled package state and runtime declarations.
 
 ## Extension First
 
@@ -32,7 +33,7 @@ Use the extension entry for package logic:
 - publish package state with `context.bus.emit` and `context.registry.set`;
 - start or call native helpers with `context.sidecars`.
 
-The manifest `contributes.services` map is descriptive. The implementation is
+The manifest `contributes.services` array is descriptive. The implementation is
 registered from `activate(context)`.
 
 ## Visuals
@@ -46,15 +47,15 @@ Visuals can subscribe to host events and call services through `VisualContext`.
 They should remain browser-compatible and avoid importing extension-host-only
 modules.
 
-## Pages And Webviews
+## Browser Surfaces
 
-Use `contributes.pages` for full host pages, `contributes.webviews` for
-plugin-owned panels, and `contributes.overlays` for OBS/browser rendering
-assets. Keep the browser entry small and communicate through the webview bridge.
+Use `contributes.visuals` for reusable browser entries mounted by host-owned
+surfaces such as overlays and pages. Keep the browser entry small and
+communicate through the webview bridge.
 
-Host-owned settings should use JSON Schema through package `settings` or
-`contributes.configuration`. Use a custom webview only when the configuration
-workflow needs rich interaction.
+Host-owned settings should use JSON Schema through `contributes.settings`.
+Custom configuration visuals are reserved for a later settings contract.
+`settings.ui` is not supported in V4.
 
 ## Services
 
