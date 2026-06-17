@@ -27,6 +27,7 @@ const allowedVisualKinds = new Set(["overlay", "config", "external"]);
 const sidecarRuntimePattern = /^sidecar:[a-zA-Z0-9._-]+$/;
 const sidecarActivationModes = new Set(["manual", "onEnable", "onStartup"]);
 const sidecarProtocol = "jsonrpc-stdio";
+const supportedArtifactPlatforms = new Set(["any", "darwin-arm64", "darwin-x64", "linux-x64", "windows-x64"]);
 
 function fail(message) {
   console.error(message);
@@ -405,10 +406,23 @@ function validatePackageV4(packageDir, manifest) {
   validateExternalSurfaces(manifest, sidecarIds);
 }
 
+function validateNoEmbeddedNodeRuntime(packageDir) {
+  for (const file of walkFiles(packageDir)) {
+    const normalized = file.split("\\").join("/");
+    const lower = normalized.toLowerCase();
+    const parts = lower.split("/");
+    const basename = parts.at(-1);
+    if (basename === "node" || basename === "node.exe" || /(^|\/)bin\/node[^/]*$/.test(lower)) {
+      fail(`Package must not embed a Node runtime binary: ${normalized}`);
+    }
+  }
+}
+
 function validatePackage(packageDir, { print = true } = {}) {
   const manifest = readPackageManifest(packageDir);
   validateRuntimeCompatibility(manifest);
   validatePackageV4(packageDir, manifest);
+  validateNoEmbeddedNodeRuntime(packageDir);
   if (print) console.log(`Package validation passed: ${manifest.id}`);
   return manifest;
 }
@@ -442,6 +456,14 @@ function requireOption(options, key, label) {
   const value = options[key];
   if (typeof value !== "string" || value.trim() === "") fail(`Missing ${label}.`);
   return value.trim();
+}
+
+function artifactPlatform(options) {
+  const value = options.platform === undefined || options.platform === true ? "any" : String(options.platform).trim();
+  if (!supportedArtifactPlatforms.has(value)) {
+    fail(`--platform must be one of: ${Array.from(supportedArtifactPlatforms).join(", ")}.`);
+  }
+  return value;
 }
 
 function optionalUrl(value, label, repoParts = null) {
@@ -569,15 +591,19 @@ function releaseMetadata(packageDir, args) {
   if (!existsSync(bundlePath)) fail(`Bundle does not exist: ${bundlePath}`);
   const bundleUrl = requireOption(options, "bundle_url", "--bundle-url");
   const listingUrl = requireOption(options, "listing_url", "--listing-url");
+  const artifact = {
+    platform: artifactPlatform(options),
+    bundleUrl,
+    bundleSha256: sha256File(bundlePath),
+    signaturePublicKey: readSignaturePublicKey(packageDir)
+  };
   const metadata = {
     schema: "bakingrl.plugin-release/1",
     packageId: manifest.id,
     version: manifest.version,
     repo: listing.repo,
     listingUrl,
-    bundleUrl,
-    bundleSha256: sha256File(bundlePath),
-    signaturePublicKey: readSignaturePublicKey(packageDir),
+    artifacts: [artifact],
     runtimeApi: manifest.bakingrlApi ?? null,
     generatedAt: new Date().toISOString()
   };
@@ -594,6 +620,12 @@ function marketplaceEntry(packageDir, args) {
   const bundleUrl = requireOption(options, "bundle_url", "--bundle-url");
   const listingUrl = requireOption(options, "listing_url", "--listing-url");
   const reviewedAt = typeof options.reviewed_at === "string" ? options.reviewed_at : new Date().toISOString();
+  const artifact = {
+    platform: artifactPlatform(options),
+    bundleUrl,
+    bundleSha256: sha256File(bundlePath),
+    signaturePublicKey: readSignaturePublicKey(packageDir)
+  };
   const entry = {
     schema: "bakingrl.marketplace-package/1",
     id: manifest.id,
@@ -603,9 +635,7 @@ function marketplaceEntry(packageDir, args) {
     approvedVersions: [
       {
         version: manifest.version,
-        bundleUrl,
-        bundleSha256: sha256File(bundlePath),
-        signaturePublicKey: readSignaturePublicKey(packageDir),
+        artifacts: [artifact],
         runtimeApi: manifest.bakingrlApi ?? null,
         review: {
           status: "approved",
@@ -961,7 +991,7 @@ function main() {
     console.log(appDataDir());
     return;
   }
-  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|doctor|validate-listing|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]\n       node scripts/bakingrl-plugin.mjs release-metadata [package-dir] --bundle-url <url> --listing-url <url> [--bundle <path>] [--output <path>]\n       node scripts/bakingrl-plugin.mjs marketplace-entry [package-dir] --developer <id> --bundle-url <url> --listing-url <url> [--bundle <path>] [--reviewed-at <iso>] [--output <path>]");
+  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|doctor|validate-listing|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]\n       node scripts/bakingrl-plugin.mjs release-metadata [package-dir] --bundle-url <url> --listing-url <url> [--bundle <path>] [--platform <platform>] [--output <path>]\n       node scripts/bakingrl-plugin.mjs marketplace-entry [package-dir] --developer <id> --bundle-url <url> --listing-url <url> [--bundle <path>] [--platform <platform>] [--reviewed-at <iso>] [--output <path>]");
 }
 
 main();

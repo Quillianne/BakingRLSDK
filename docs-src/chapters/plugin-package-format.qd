@@ -229,7 +229,7 @@ signature.ed25519
 ```
 
 Do not include source caches, signing keys, private keys, `.env` files,
-secrets, or local machine files in a bundle.
+secrets, local machine files, or bundled Node runtime binaries in a bundle.
 
 ## `.brlp` Archives
 

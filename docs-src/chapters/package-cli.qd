@@ -39,7 +39,9 @@ Validation checks:
   contributes, host-owned settings, and external surfaces;
 - built JavaScript entries for extension host and declared visuals;
 - sidecar command paths and `jsonrpc-stdio` declarations;
-- package-local paths for declared contribution assets and runtime entries.
+- package-local paths for declared contribution assets and runtime entries;
+- absence of bundled Node runtime binaries such as `node`, `node.exe`, or
+  `bin/node*`.
 
 Current validation should reject unsupported V4 fields such as `settings.ui`,
 `externalSurfaces.web`, and `externalSurfaces.remote`.
@@ -98,9 +100,14 @@ The helper can validate marketplace listings and generate release metadata:
 
 ```sh
 bakingrl-plugin validate-listing .
-bakingrl-plugin release-metadata . --bundle-url <url> --listing-url <url>
-bakingrl-plugin marketplace-entry . --developer <id> --bundle-url <url> --listing-url <url>
+bakingrl-plugin release-metadata . --bundle-url <url> --listing-url <url> --platform any
+bakingrl-plugin marketplace-entry . --developer <id> --bundle-url <url> --listing-url <url> --platform any
 ```
 
-Marketplace metadata includes `bakingrlApi`, bundle hash, signature public key,
-review metadata, and other host-facing package fields.
+`--platform` defaults to `any`. Native sidecar packages should publish one
+artifact per supported platform using `darwin-arm64`, `darwin-x64`,
+`linux-x64`, or `windows-x64`.
+
+Marketplace metadata includes `bakingrlApi`, reviewed `artifacts` with bundle
+hashes and signature public keys, review metadata, and other host-facing
+package fields.
