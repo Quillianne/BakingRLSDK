@@ -70,12 +70,28 @@ values are surfaced through host-managed settings and secrets APIs.
 
 `externalSurfaces`
 
-Optional host-facing integration points. The current supported declaration is
-`externalSurfaces.obs` for package-owned OBS browser surfaces served through the
-host OBS gateway.
+Optional host-facing integration points. Supported keys are
+`externalSurfaces.obs`, `externalSurfaces.web`, and `externalSurfaces.remote`.
+Each surface declaration must contain a runtime reference:
 
-`settings.ui`, `externalSurfaces.web`, and `externalSurfaces.remote` are not
-supported in V4 and should be rejected by current hosts and helper validation.
+```json
+{
+  "externalSurfaces": {
+    "obs": {
+      "runtime": "node"
+    },
+    "web": {
+      "runtime": "sidecar:web-gateway"
+    },
+    "remote": {
+      "runtime": "node"
+    }
+  }
+}
+```
+
+Runtime references are `node` or `sidecar:<id>`, where `<id>` must match a
+declared `runtime.sidecars` entry.
 
 ## Contributes
 
@@ -165,9 +181,20 @@ Activation can be `manual`, `onEnable`, or `onStartup`.
 `contributes.settings` points to a JSON schema for host-owned settings.
 Non-sensitive values are exposed through `context.settings`.
 
+`contributes.settings.ui` can reference a `contributes.visuals` id when that
+visual declares `kind: "config"`. The host opens it as the package
+configuration surface and provides `context.configuration` for host-owned
+settings edits, settings subscriptions, and declared secret configuration.
+
 Secret fields must be string properties with `x-bakingrl-secret: true`.
 Secrets must not declare defaults. BakingRL stores them outside the package
-bundle and never writes secret values to settings JSON.
+bundle and never writes secret values to settings JSON. Configuration visuals
+can set, clear, and check configured state for declared secrets, but direct
+secret reads stay in the extension host secret API.
+
+Fields marked with `x-bakingrl-restart-required: true` are shown as requiring a
+package reload when changed. BakingRL reloads package runtimes after saving
+package settings.
 
 ```json
 {

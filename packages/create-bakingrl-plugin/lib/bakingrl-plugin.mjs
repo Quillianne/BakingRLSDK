@@ -22,6 +22,7 @@ const allowedTopLevelFields = new Set([
 const rejectedTopLevelFields = ["schema", "compatibility", "capabilities", "kind", "activation", "settings", "diagnostics", "safeMode"];
 const legacyContributeGroups = ["views", "pages", "overlays", "webviews", "configuration", "assets", "schemas"];
 const supportedContributionSections = new Set(["commands", "services", "visuals", "settings"]);
+const supportedExternalSurfaces = new Set(["obs", "web", "remote"]);
 const allowedVisualKinds = new Set(["overlay", "config", "external"]);
 const sidecarRuntimePattern = /^sidecar:[a-zA-Z0-9._-]+$/;
 const sidecarActivationModes = new Set(["manual", "onEnable", "onStartup"]);
@@ -300,19 +301,28 @@ function validateContributionVisuals(packageDir, visuals = []) {
   }
 }
 
-function validateContributesSettings(packageDir, settings) {
+function validateContributesSettings(packageDir, contributes) {
+  const settings = contributes.settings;
   if (settings === undefined) return;
   assertPlainObject(settings, "manifest.contributes.settings");
-  if (Object.prototype.hasOwnProperty.call(settings, "ui")) {
-    fail("manifest.contributes.settings.ui is not supported yet");
-  }
+  assertAllowedKeys(settings, "manifest.contributes.settings", new Set(["schema", "ui"]));
   for (const key of Object.keys(settings)) {
-    if (key !== "schema") {
+    if (key !== "schema" && key !== "ui") {
       fail(`manifest.contributes.settings.${key} is not supported`);
     }
   }
   if (Object.prototype.hasOwnProperty.call(settings, "schema")) {
     validateOptionalPathField(packageDir, "manifest.contributes.settings", settings, "schema", "Settings schema");
+  }
+  if (Object.prototype.hasOwnProperty.call(settings, "ui")) {
+    if (typeof settings.ui !== "string") {
+      fail("manifest.contributes.settings.ui must be a visual id");
+    }
+    validateExportName("manifest.contributes.settings.ui", settings.ui);
+    const visual = (contributes.visuals ?? []).find((entry) => entry.id === settings.ui && entry.kind === "config");
+    if (!visual) {
+      fail(`manifest.contributes.settings.ui must reference a visual with kind config (${settings.ui})`);
+    }
   }
 }
 
@@ -355,7 +365,7 @@ function validateContributesSection(manifest, packageDir, sidecarIds) {
   validateContributionCommands(packageDir, contributes.commands);
   validateContributionServices(packageDir, contributes.services, sidecarIds);
   validateContributionVisuals(packageDir, contributes.visuals);
-  validateContributesSettings(packageDir, contributes.settings);
+  validateContributesSettings(packageDir, contributes);
 }
 
 function validateRuntimeRef(label, value, sidecarIds = null) {
@@ -375,16 +385,17 @@ function validateRuntimeRef(label, value, sidecarIds = null) {
 
 function validateExternalSurfaces(manifest, sidecarIds) {
   if (manifest.externalSurfaces === undefined) return;
-  if (Object.prototype.hasOwnProperty.call(manifest.externalSurfaces, "web")) {
-    fail("manifest.externalSurfaces.web is not supported yet");
-  }
-  if (Object.prototype.hasOwnProperty.call(manifest.externalSurfaces, "remote")) {
-    fail("manifest.externalSurfaces.remote is not supported yet");
-  }
-  assertAllowedKeys(manifest.externalSurfaces, "manifest.externalSurfaces", new Set(["obs"]));
-  if (manifest.externalSurfaces.obs !== undefined) {
-    assertAllowedKeys(manifest.externalSurfaces.obs, "manifest.externalSurfaces.obs", new Set(["runtime"]));
-    validateRuntimeRef("manifest.externalSurfaces.obs.runtime", manifest.externalSurfaces.obs.runtime, sidecarIds);
+  const externalSurfaces = assertPlainObject(manifest.externalSurfaces, "manifest.externalSurfaces");
+  for (const [surface, declaration] of Object.entries(externalSurfaces)) {
+    if (!supportedExternalSurfaces.has(surface)) {
+      fail(`manifest.externalSurfaces.${surface} is not supported`);
+    }
+    const label = `manifest.externalSurfaces.${surface}`;
+    assertAllowedKeys(declaration, label, new Set(["runtime"]));
+    if (!Object.prototype.hasOwnProperty.call(declaration, "runtime")) {
+      fail(`${label}.runtime is required`);
+    }
+    validateRuntimeRef(`${label}.runtime`, declaration.runtime, sidecarIds);
   }
 }
 

@@ -25,9 +25,11 @@ Use page and overlay templates to give users a starting point. Keep templates
 portable by relying on package contribution references and item settings rather
 than specific template IDs.
 
-Use host-owned settings for package configuration. `settings.ui` is not
-supported in V4, and custom configuration visuals are reserved for a later
-settings contract. Leave secrets in the host-owned settings UI.
+Use host-owned settings for package configuration. Custom configuration visuals
+can be referenced through `contributes.settings.ui` when the visual declares
+`kind: "config"`. Secret values must still stay host-owned; custom
+configuration visuals should use `context.configuration.secrets` only for
+configured state plus set/clear flows.
 
 ## Design The Runtime Data Flow
 

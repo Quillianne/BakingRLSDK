@@ -112,7 +112,20 @@ export default defineVisual({
 
 `VisualContext` contains the DOM root, package metadata, the overlay/editor
 item rectangle, visual settings, editor mode, bus subscription, registry reads,
-service calls, asset URL resolution, and diagnostics.
+service calls, asset URL resolution, and diagnostics. When a visual is mounted
+as a package configuration surface through `contributes.settings.ui`, the
+context also includes `configuration`:
+
+```ts
+const saved = await context.configuration?.settings.get();
+await context.configuration?.settings.update({ accentColor: "#ffcc66" });
+const apiKeyReady = await context.configuration?.secrets.configured("apiKey");
+```
+
+`configuration.settings` saves through the host settings pipeline, so schema
+defaults, sanitization, and runtime reload behavior stay host-owned. Secret
+configuration supports configured checks plus set/clear; custom configuration
+visuals do not receive secret values through `context.settings`.
 
 ## Browser Bridge
 

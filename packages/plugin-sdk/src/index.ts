@@ -18,9 +18,74 @@ export type BakingRLEventData<TEvent extends string> = TEvent extends RlTelemetr
   ? RlTelemetryPayloadByEvent[TEvent]
   : unknown;
 
+export type TelemetryHub = {
+  subscribe<TEvent extends string>(
+    eventName: TEvent,
+    callback: (event: BakingRLEvent<BakingRLEventData<TEvent>, TEvent>) => void | Promise<void>
+  ): CleanupFn;
+  publish<TEvent extends string>(
+    eventName: TEvent,
+    payload?: BakingRLEventData<TEvent>
+  ): void | Promise<unknown>;
+  snapshot<TEvent extends string = string>():
+    | BakingRLEvent<BakingRLEventData<TEvent>, TEvent>
+    | null
+    | Promise<BakingRLEvent<BakingRLEventData<TEvent>, TEvent> | null>;
+  getSnapshot<TEvent extends string = string>():
+    | BakingRLEvent<BakingRLEventData<TEvent>, TEvent>
+    | null
+    | Promise<BakingRLEvent<BakingRLEventData<TEvent>, TEvent> | null>;
+};
+
+export type StateHub = {
+  read<TValue = unknown>(key: string): Promise<TValue | null>;
+  write<TValue = unknown>(key: string, value: TValue): Promise<unknown>;
+  snapshot<TValue extends Record<string, unknown> = Record<string, unknown>>(): TValue | Promise<TValue>;
+  getSnapshot<TValue extends Record<string, unknown> = Record<string, unknown>>(): TValue | Promise<TValue>;
+};
+
 export type ContextState = {
   get<TValue = unknown>(key: string): Promise<TValue | null>;
   set<TValue = unknown>(key: string, value: TValue): Promise<void>;
+};
+
+export type ConfigurationSecretState = {
+  key: string;
+  label: string;
+  description?: string | null;
+  required: boolean;
+  configured: boolean;
+};
+
+export type ConfigurationState = {
+  packageId: string;
+  title: string;
+  hasCustomPage: boolean;
+  schema: unknown;
+  values: Record<string, unknown>;
+  secrets: ConfigurationSecretState[];
+  secretStoreAvailable: boolean;
+  secretStoreError?: string | null;
+};
+
+export type ConfigurationSettingsContext = {
+  get(): Promise<Record<string, unknown>>;
+  update(values: Record<string, unknown>): Promise<Record<string, unknown>>;
+  save(values: Record<string, unknown>): Promise<Record<string, unknown>>;
+  reset(): Promise<Record<string, unknown>>;
+  subscribe(callback: (settings: Record<string, unknown>) => void | Promise<void>): CleanupFn;
+};
+
+export type ConfigurationSecretsContext = {
+  configured(key: string): Promise<boolean>;
+  set(key: string, value: string): Promise<ConfigurationState>;
+  clear(key: string): Promise<ConfigurationState>;
+};
+
+export type ConfigurationContext = {
+  packageId: string;
+  settings: ConfigurationSettingsContext;
+  secrets: ConfigurationSecretsContext;
 };
 
 export type VisualContext = {
@@ -51,9 +116,11 @@ export type VisualContext = {
   editor?: VisualEditorContext;
   setActive(active: boolean): void;
   bus: VisualBus;
+  telemetryHub: TelemetryHub;
   registry: ReadonlyRegistry;
   state: ContextState;
   services: ServiceCaller;
+  configuration?: ConfigurationContext;
   assets: AssetResolver;
   diagnostics: ExtensionDiagnostics;
   telemetry: ExtensionTelemetry;
@@ -212,6 +279,8 @@ export type ExtensionContext = {
   subscriptions: ExtensionSubscription[];
   storage: PluginStorage;
   bus: ExtensionBus;
+  telemetryHub: TelemetryHub;
+  stateHub: StateHub;
   registry: ExtensionRegistry;
   logger: ExtensionLogger;
   diagnostics: ExtensionDiagnostics;
@@ -300,6 +369,8 @@ export type RuntimeDeclaration = {
   sidecars?: RuntimeSidecar[];
 };
 
+export type RuntimeRef = "node" | `sidecar:${string}`;
+
 export type ContributionCommand = {
   id: string;
   title?: string;
@@ -309,7 +380,7 @@ export type ContributionCommand = {
 
 export type ContributionService = {
   id: string;
-  runtime?: "node" | `sidecar:${string}`;
+  runtime?: RuntimeRef;
   methods?: string[];
   schema?: string;
 };
@@ -333,6 +404,7 @@ export type ContributionSchema = {
 
 export type ContributionSettings = {
   schema?: string;
+  ui?: string;
 };
 
 export type PluginManifestV4Contributes = {
@@ -343,9 +415,13 @@ export type PluginManifestV4Contributes = {
 };
 
 export type PluginManifestV4ExternalSurfaces = {
-  obs?: {
-    runtime: "node" | `sidecar:${string}`;
-  };
+  obs?: PluginManifestV4ExternalSurface;
+  web?: PluginManifestV4ExternalSurface;
+  remote?: PluginManifestV4ExternalSurface;
+};
+
+export type PluginManifestV4ExternalSurface = {
+  runtime: RuntimeRef;
 };
 
 export type PluginManifestV4 = {
@@ -478,6 +554,7 @@ export function createMockVisualContext(
   partial: Partial<VisualContext> = {}
 ): VisualContext {
   const listeners = new Set<(event: BakingRLEvent) => void>();
+  let latestEvent: BakingRLEvent | null = null;
   return {
     root: document.createElement("div"),
     package: {
@@ -505,7 +582,8 @@ export function createMockVisualContext(
     mode: "editor",
     editor: {
       emit(eventName, payload) {
-        for (const listener of listeners) listener({ Event: eventName, Data: payload } as BakingRLEvent);
+        latestEvent = { Event: eventName, Data: payload } as BakingRLEvent;
+        for (const listener of listeners) listener(latestEvent);
       }
     },
     setActive() {},
@@ -516,6 +594,24 @@ export function createMockVisualContext(
         return () => listeners.delete(listener);
       }
     },
+    telemetryHub: {
+      subscribe(_eventName, callback) {
+        const listener = callback as (event: BakingRLEvent) => void;
+        listeners.add(listener);
+        if (latestEvent) listener(latestEvent);
+        return () => listeners.delete(listener);
+      },
+      publish(eventName, payload) {
+        latestEvent = { Event: eventName, Data: payload } as BakingRLEvent;
+        for (const listener of listeners) listener(latestEvent);
+      },
+      snapshot<TEvent extends string = string>() {
+        return latestEvent as BakingRLEvent<BakingRLEventData<TEvent>, TEvent> | null;
+      },
+      getSnapshot<TEvent extends string = string>() {
+        return latestEvent as BakingRLEvent<BakingRLEventData<TEvent>, TEvent> | null;
+      }
+    },
     registry: {
       async get() {
         return null;
@@ -524,6 +620,37 @@ export function createMockVisualContext(
     services: {
       async call() {
         return null as never;
+      }
+    },
+    configuration: {
+      packageId: "com.example.mock",
+      settings: {
+        async get() {
+          return {};
+        },
+        async update(values) {
+          return { ...values };
+        },
+        async save(values) {
+          return { ...values };
+        },
+        async reset() {
+          return {};
+        },
+        subscribe() {
+          return () => {};
+        }
+      },
+      secrets: {
+        async configured() {
+          return false;
+        },
+        async set(key) {
+          return mockConfigurationState(key, true);
+        },
+        async clear(key) {
+          return mockConfigurationState(key, false);
+        }
       }
     },
     assets: {
@@ -550,6 +677,28 @@ export function createMockVisualContext(
     },
     diagnostics: consoleDiagnostics(),
     ...partial
+  };
+}
+
+function mockConfigurationState(key: string, configured: boolean): ConfigurationState {
+  return {
+    packageId: "com.example.mock",
+    title: "Mock Settings",
+    hasCustomPage: true,
+    schema: null,
+    values: {},
+    secrets: key
+      ? [
+          {
+            key,
+            label: key,
+            required: false,
+            configured
+          }
+        ]
+      : [],
+    secretStoreAvailable: true,
+    secretStoreError: null
   };
 }
 

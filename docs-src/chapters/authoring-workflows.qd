@@ -54,8 +54,8 @@ surfaces such as overlays and pages. Keep the browser entry small and
 communicate through the webview bridge.
 
 Host-owned settings should use JSON Schema through `contributes.settings`.
-Custom configuration visuals are reserved for a later settings contract.
-`settings.ui` is not supported in V4.
+Custom configuration visuals can be exposed by setting `contributes.settings.ui`
+to the id of a `contributes.visuals` entry whose `kind` is `config`.
 
 ## Services
 

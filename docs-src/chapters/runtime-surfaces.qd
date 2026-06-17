@@ -95,19 +95,21 @@ context.bus.emit("plugin.com.example.package.state", currentState);
 Dispose subscriptions from `deactivate()` or by pushing cleanups into
 `context.subscriptions`.
 
-## Visuals, Pages, Overlays, And OBS
+## Visuals, Pages, Overlays, And External Surfaces
 
 Browser UI is declared through `contributes`:
 
 - `visuals`: reusable browser entries mounted inside host-owned pages,
   overlays, and layouts;
-- `externalSurfaces.obs`: package-owned OBS browser surfaces served through the
-  host OBS gateway.
+- `externalSurfaces.obs`, `externalSurfaces.web`, and
+  `externalSurfaces.remote`: package-owned external surfaces backed by a
+  declared runtime reference.
 
 Browser code runs inside a host-rendered container and communicates with the
 host through the SDK bridge and event bus. It should not assume filesystem paths
-or global routes. OBS surface identifiers and browser entries are owned by the
-package; the host gateway only supervises and serves them.
+or global routes. External surface identifiers and browser entries are owned by
+the package; the host gateway only supervises and serves them. Runtime
+references are `node` or `sidecar:<id>`.
 
 ## Registry And Storage
 
@@ -136,9 +138,27 @@ Secret settings use `x-bakingrl-secret: true`. The host stores them outside the
 package bundle and exposes only host-mediated secret access. Never write secret
 values to bundle files, settings JSON, logs, diagnostics, or tests.
 
-`settings.ui` is not supported in V4. Custom browser settings panels are
-reserved for a later runtime contract and should be rejected by current hosts
-and helper validation.
+`contributes.settings.ui` can reference the id of a browser visual declared
+with `kind: "config"`. Configuration visuals still receive the normal
+read-oriented `context.settings` snapshot, and additionally receive
+`context.configuration`:
+
+```ts
+const values = await context.configuration?.settings.get();
+await context.configuration?.settings.update({ theme: "compact" });
+const secretReady = await context.configuration?.secrets.configured("apiKey");
+```
+
+`settings.update(values)` merges the provided values into the current
+host-owned settings and saves them. `settings.save(values)` replaces the saved
+settings object, `settings.reset()` stores an empty object so schema defaults
+apply again, and `settings.subscribe(callback)` follows host settings change
+events. Save and update calls go through host validation and sanitization.
+
+Secret values still stay host-owned and are not passed through schema settings
+values. Configuration visuals can check whether a declared secret is configured
+and can set or clear the secret when the host supports those commands; direct
+secret value reads are reserved for the extension host secret reader.
 
 ## Native Sidecars
 
