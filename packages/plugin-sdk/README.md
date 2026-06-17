@@ -11,7 +11,7 @@ npm install @bakingrl/plugin-sdk
 ## Usage
 
 ```ts
-import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
+import { defineVisual, defineWebview, type VisualContext, type WebviewContext } from "@bakingrl/plugin-sdk";
 
 export default defineVisual({
   mount(context: VisualContext) {
@@ -36,8 +36,19 @@ export default defineVisual({
 });
 ```
 
+Declared webviews export a `mount(context)` module too:
+
+```ts
+export default defineWebview({
+  async mount(context: WebviewContext) {
+    const settings = await context.settings.get();
+    context.root.textContent = String(settings.title ?? "Tool");
+  }
+});
+```
+
 This SDK targets BakingRL trusted plugin package schema `bakingrl.plugin/4`,
-SDK version `2.1.0`, and `bakingrlApi: "2.1.0"` for the current V4 runtime
+SDK version `2.1.1`, and `bakingrlApi: "2.1.0"` for the current V4 runtime
 contract.
 
 See the repository `docs-src/` documentation for the full SDK API, manifest

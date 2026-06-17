@@ -76,7 +76,7 @@ function sdkDependency(packageDir) {
   const localSdkPath = resolve(packageRoot, "..", "plugin-sdk");
   if (existsSync(localSdkPath)) return packageRelativeFileDependency(packageDir, localSdkPath);
 
-  return "^2.1.0";
+  return "^2.1.1";
 }
 
 function copyTemplate(source, target, replacements) {

@@ -1,6 +1,6 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "2.1.0";
+export const SDK_VERSION = "2.1.1";
 export const RUNTIME_API_VERSION = "2.1.0";
 
 export * from "./telemetry.js";
@@ -255,6 +255,24 @@ export type ExtensionWebviewController = {
   declared: Record<string, ContributionWebview>;
   open(id: string, options?: unknown): Promise<unknown>;
   close(id: string): Promise<unknown>;
+};
+
+export type WebviewSettingsController = {
+  get(): Promise<Record<string, unknown>>;
+  save(values: Record<string, unknown>): Promise<Record<string, unknown>>;
+  subscribe(callback: (settings: Record<string, unknown>) => void | Promise<void>): CleanupFn;
+};
+
+export type WebviewContext = {
+  root: HTMLElement;
+  packageId: string;
+  webviewId: string;
+  settings: WebviewSettingsController;
+  dimensions: {
+    width: number;
+    height: number;
+  };
+  mode: "runtime";
 };
 
 export type PluginDescriptor = {
@@ -584,6 +602,10 @@ export type WebviewBridge = {
   on<TMessage extends WebviewMessage>(handler: (message: TMessage) => void | Promise<void>): ExtensionSubscription;
 };
 
+export type WebviewExport = {
+  mount(context: WebviewContext): void | CleanupFn | Promise<void | CleanupFn>;
+};
+
 export type VisualExport = {
   mount(context: VisualContext): void | CleanupFn | Promise<void | CleanupFn>;
   update?(context: VisualContext): void | Promise<void>;
@@ -620,6 +642,10 @@ export function defineExtension<T extends ExtensionModule>(extension: T): T {
 
 export function defineVisual<T extends VisualExport>(visual: T): T {
   return visual;
+}
+
+export function defineWebview<T extends WebviewExport>(webview: T): T {
+  return webview;
 }
 
 export function createExtensionTarget(packageId: string, extensionPointId: string): ExtensionPointTarget {

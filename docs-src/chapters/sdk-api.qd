@@ -5,7 +5,7 @@
 
 The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v4 plugin
 contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/4`,
-SDK `2.1.0`, and `bakingrlApi: "2.1.0"` for new packages.
+SDK `2.1.1`, and `bakingrlApi: "2.1.0"` for new packages.
 
 The SDK is an authoring contract. Runtime behavior is provided by the host:
 package loading, extension host supervision, bridge calls, service routing,
@@ -152,6 +152,25 @@ defaults, sanitization, and runtime reload behavior stay host-owned. Secret
 configuration supports configured checks plus set/clear; custom configuration
 visuals do not receive secret values through `context.settings`.
 
+## Webviews
+
+Declared webviews use module entries too. The host mounts the module into the
+webview route and provides package settings through a mediated context:
+
+```ts
+import { defineWebview, type WebviewContext } from "@bakingrl/plugin-sdk";
+
+export default defineWebview({
+  async mount(context: WebviewContext) {
+    const settings = await context.settings.get();
+    context.root.textContent = String(settings.title ?? context.webviewId);
+  }
+});
+```
+
+`context.settings.save(values)` persists host-owned package settings and
+`context.settings.subscribe(callback)` follows later settings changes.
+
 ## Browser Bridge
 
 Browser visuals use the SDK bridge when they need structured communication with
@@ -208,7 +227,7 @@ The current protocol is JSON-RPC 2.0 over newline-delimited stdio.
 
 ## Utilities
 
-`SDK_VERSION` is `2.1.0`.
+`SDK_VERSION` is `2.1.1`.
 
 `RUNTIME_API_VERSION` is `2.1.0`, matching the manifest value
 `bakingrlApi: "2.1.0"` used by new packages.

@@ -16,7 +16,7 @@ Current packages use:
 
 - manifest schema `bakingrl.plugin/4`;
 - `bakingrlApi: "2.1.0"` for new packages;
-- SDK package version `2.1.0`;
+- SDK package version `2.1.1`;
 - one JavaScript extension host entry per package in `runtime.node`;
 - browser visuals and host-owned settings metadata declared through
   `contributes`;
