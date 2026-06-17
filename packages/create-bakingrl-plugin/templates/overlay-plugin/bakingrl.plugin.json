@@ -1,59 +1,27 @@
 {
-  "schema": "bakingrl.plugin/3",
-  "kind": "trusted",
+  "schemaVersion": "bakingrl.plugin/4",
+  "bakingrlApi": "2.0.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
   "author": "Your Name",
-  "compatibility": {
-    "runtimeApi": "__RUNTIME_API_VERSION__",
-    "sdk": "__PLUGIN_SDK_VERSION__"
-  },
   "runtime": {
-    "extensionHost": {
+    "node": {
       "entry": "dist/extension/index.js"
     },
-    "sidecars": {}
-  },
-  "activation": {
-    "events": ["onStartup"]
+    "sidecars": []
   },
   "contributes": {
-    "commands": {},
-    "services": {},
-    "visuals": {},
-    "views": {},
-    "pages": {},
-    "overlays": {
-      "main": {
-        "title": "__PLUGIN_NAME__ Overlay",
-        "entry": "dist/overlays/main.js",
+    "commands": [],
+    "services": [],
+    "visuals": [
+      {
+        "id": "overlay",
+        "kind": "overlay",
+        "entry": "dist/visuals/main.js",
         "defaultSize": [640, 180]
       }
-    },
-    "webviews": {},
-    "configuration": {},
-    "assets": {},
-    "schemas": {}
-  },
-  "capabilities": {
-    "permissions": {
-      "bus": {
-        "read": ["UpdateState", "GoalScored"],
-        "publish": ["plugin.__PLUGIN_ID__.*"]
-      },
-      "registry": {
-        "read": [],
-        "write": []
-      },
-      "network": {
-        "http": [],
-        "websocket": []
-      },
-      "storage": ["plugin://self/*"]
-    }
-  },
-  "diagnostics": {
-    "enabled": true
+    ],
+    "settings": {}
   }
 }

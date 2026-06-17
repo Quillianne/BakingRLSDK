@@ -8,24 +8,22 @@ import { stdin as input, stdout as output } from "node:process";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templatesRoot = join(packageRoot, "templates");
 const helperPath = join(packageRoot, "lib", "bakingrl-plugin.mjs");
-const runtimeApiVersion = "1.0.0";
-const sdkVersion = "1.0.3";
 
 const templates = [
   {
     id: "extension-plugin",
-    label: "Trusted Extension Plugin Package",
-    description: "Manifest v3 package with an extension host entry and webview contribution."
+    label: "Extension Plugin Package",
+    description: "Manifest v4 with a Node extension runtime and a visual contribution."
   },
   {
     id: "overlay-plugin",
-    label: "Trusted Overlay Plugin Package",
-    description: "Manifest v3 package with an extension host entry and overlay contribution."
+    label: "Overlay Plugin Package",
+    description: "Manifest v4 with a Node runtime and overlay-style visual contribution."
   },
   {
     id: "native-sidecar-plugin",
-    label: "Trusted Native Sidecar Plugin Package",
-    description: "Manifest v3 package with a Rust JSON-RPC stdio sidecar."
+    label: "Native Sidecar Plugin Package",
+    description: "Manifest v4 with a Rust JSON-RPC stdio sidecar."
   }
 ];
 
@@ -78,7 +76,7 @@ function sdkDependency(packageDir) {
   const localSdkPath = resolve(packageRoot, "..", "plugin-sdk");
   if (existsSync(localSdkPath)) return packageRelativeFileDependency(packageDir, localSdkPath);
 
-  return "^1.0.3";
+  return "^2.0.0";
 }
 
 function copyTemplate(source, target, replacements) {
@@ -149,9 +147,7 @@ async function main() {
     "__PLUGIN_SLUG__": slug,
     "__PLUGIN_NAME__": title,
     "__PLUGIN_ID__": pluginId,
-    "__PLUGIN_SDK_DEP__": sdkDependencyValue,
-    "__RUNTIME_API_VERSION__": runtimeApiVersion,
-    "__PLUGIN_SDK_VERSION__": sdkVersion
+    "__PLUGIN_SDK_DEP__": sdkDependencyValue
   });
 
   mkdirSync(join(targetDir, "scripts"), { recursive: true });

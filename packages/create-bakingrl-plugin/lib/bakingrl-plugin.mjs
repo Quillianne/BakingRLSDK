@@ -1,28 +1,31 @@
 #!/usr/bin/env node
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { homedir, platform } from "node:os";
 import { spawnSync } from "node:child_process";
 import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
-const runtimeApiVersion = "1.0.0";
-const sdkVersion = "1.0.3";
-const supportedRuntimeApiRange = ">=1.0.0 <2.0.0";
-const v3ContributionMaps = [
-  "commands",
-  "services",
-  "visuals",
-  "views",
-  "pages",
-  "overlays",
-  "webviews",
-  "configuration",
-  "assets",
-  "schemas"
-];
-const emptyV3Contributes = () => Object.fromEntries(v3ContributionMaps.map((name) => [name, {}]));
+const runtimeApiVersion = "2.0.0";
+const allowedTopLevelFields = new Set([
+  "schemaVersion",
+  "id",
+  "name",
+  "version",
+  "author",
+  "bakingrlApi",
+  "runtime",
+  "contributes",
+  "externalSurfaces"
+]);
+const rejectedTopLevelFields = ["schema", "compatibility", "capabilities", "kind", "activation", "settings", "diagnostics", "safeMode"];
+const legacyContributeGroups = ["views", "pages", "overlays", "webviews", "configuration", "assets", "schemas"];
+const supportedContributionSections = new Set(["commands", "services", "visuals", "settings"]);
+const allowedVisualKinds = new Set(["overlay", "config", "external"]);
+const sidecarRuntimePattern = /^sidecar:[a-zA-Z0-9._-]+$/;
+const sidecarActivationModes = new Set(["manual", "onEnable", "onStartup"]);
+const sidecarProtocol = "jsonrpc-stdio";
 
 function fail(message) {
   console.error(message);
@@ -77,16 +80,26 @@ function readPackageManifest(packageDir) {
   const manifestPath = join(packageDir, "bakingrl.plugin.json");
   if (!existsSync(manifestPath)) fail(`Missing bakingrl.plugin.json in ${packageDir}`);
   const manifest = readJson(manifestPath);
-  if (manifest.schema !== "bakingrl.plugin/3") {
-    fail("manifest.schema must be bakingrl.plugin/3");
+  const { schemaVersion: manifestSchemaVersion, bakingrlApi: manifestBakingrlApi } = manifest;
+  if (manifestSchemaVersion !== "bakingrl.plugin/4") {
+    fail("schemaVersion must be bakingrl.plugin/4");
+  }
+  if (typeof manifestBakingrlApi !== "string" || manifestBakingrlApi.trim() === "") {
+    fail("manifest.bakingrlApi must be a non-empty string");
   }
   for (const field of ["id", "name", "version"]) {
     if (typeof manifest[field] !== "string" || manifest[field].trim() === "") {
       fail(`manifest.${field} must be a non-empty string`);
     }
   }
+  for (const field of rejectedTopLevelFields) {
+    if (Object.prototype.hasOwnProperty.call(manifest, field)) {
+      fail(`manifest.${field} is not supported in bakingrl.plugin/4`);
+    }
+  }
+  assertAllowedKeys(manifest, "manifest", allowedTopLevelFields);
   validatePackageId(manifest.id);
-  return manifest;
+  return { ...manifest, schemaVersion: manifestSchemaVersion, bakingrlApi: manifestBakingrlApi };
 }
 
 function assertPlainObject(value, label) {
@@ -94,6 +107,13 @@ function assertPlainObject(value, label) {
     fail(`${label} must be an object`);
   }
   return value;
+}
+
+function assertAllowedKeys(value, label, allowedKeys) {
+  assertPlainObject(value, label);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) fail(`${label}.${key} is not supported`);
+  }
 }
 
 function assertStringArray(value, label, { allowEmpty = true } = {}) {
@@ -106,38 +126,10 @@ function assertStringArray(value, label, { allowEmpty = true } = {}) {
   return value;
 }
 
-function parseSemver(value) {
-  if (typeof value !== "string") return null;
-  const parts = value.split(".").map((part) => Number(part));
-  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
-    return null;
-  }
-  return parts;
-}
-
-function isRuntimeApiSupported(parsed) {
-  const minimum = parseSemver(runtimeApiVersion);
-  if (!minimum) return false;
-  const [major, minor, patch] = parsed;
-  const [minMajor, minMinor, minPatch] = minimum;
-  if (major !== minMajor) return false;
-  if (minor < minMinor) return false;
-  if (minor === minMinor && patch < minPatch) return false;
-  return true;
-}
-
 function validateRuntimeCompatibility(manifest) {
-  const runtimeApi = manifest.compatibility?.runtimeApi;
-  const parsed = parseSemver(runtimeApi);
-  if (!parsed) {
-    fail(`manifest.compatibility.runtimeApi must declare a semver version like ${runtimeApiVersion}`);
-  }
-  if (!isRuntimeApiSupported(parsed)) {
-    fail(`manifest.compatibility.runtimeApi ${runtimeApi} is not supported by helper runtime API range ${supportedRuntimeApiRange}`);
-  }
-  const sdk = manifest.compatibility?.sdk;
-  if (sdk !== undefined && !parseSemver(sdk)) {
-    fail(`manifest.compatibility.sdk must be a semver version like ${sdkVersion}`);
+  const runtimeApi = manifest.bakingrlApi;
+  if (runtimeApi !== runtimeApiVersion) {
+    fail(`manifest.bakingrlApi must be "${runtimeApiVersion}"`);
   }
 }
 
@@ -154,33 +146,6 @@ function validateBuiltEntry(packageDir, groupName, name, exportDef) {
   }
   if (statSync(entryPath).size === 0) {
     fail(`Built entry is empty: ${exportDef.entry}`);
-  }
-}
-
-function validatePackageSettingsSchema(packageDir, settingsPath) {
-  if (settingsPath === undefined) return;
-  if (typeof settingsPath !== "string" || settingsPath.trim() === "") {
-    fail("manifest.settings must point to a package settings JSON Schema file");
-  }
-  const schemaPath = resolve(packageDir, settingsPath);
-  if (!isInsideDirectory(packageDir, schemaPath)) {
-    fail("manifest.settings must stay inside the package");
-  }
-  if (!existsSync(schemaPath)) {
-    fail(`Package settings schema does not exist: ${settingsPath}`);
-  }
-  const schema = readJson(schemaPath);
-  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
-    fail("manifest.settings must point to a JSON Schema object");
-  }
-  if (schema.type !== undefined && schema.type !== "object") {
-    fail("package settings schema type must be \"object\"");
-  }
-  if (!schema.properties || typeof schema.properties !== "object" || Array.isArray(schema.properties)) {
-    fail("package settings schema must declare properties");
-  }
-  for (const [key, property] of Object.entries(schema.properties)) {
-    validateSettingsProperty(`settings.${key}`, property);
   }
 }
 
@@ -211,6 +176,15 @@ function validateOptionalString(value, label) {
   }
 }
 
+function validateExportName(label, value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be a non-empty string`);
+  }
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    fail(`${label} must contain only letters, numbers, ".", "_" and "-"`);
+  }
+}
+
 function validateStringRecord(value, label) {
   assertPlainObject(value, label);
   for (const [key, entry] of Object.entries(value)) {
@@ -227,201 +201,203 @@ function validateDefaultSize(value, label) {
   }
 }
 
-function validateV3Sidecar(packageDir, name, sidecar) {
-  assertPlainObject(sidecar, `runtime.sidecars.${name}`);
-  validatePathField(packageDir, `runtime.sidecars.${name}`, sidecar, "command", "Sidecar command");
-  if (sidecar.protocol !== "jsonrpc-stdio") {
-    fail(`runtime.sidecars.${name}.protocol must be "jsonrpc-stdio"`);
+function validateRuntimeSidecar(packageDir, sidecar, index) {
+  const label = `manifest.runtime.sidecars[${index}]`;
+  assertPlainObject(sidecar, label);
+  assertAllowedKeys(sidecar, label, new Set(["id", "bin", "args", "env", "platforms", "protocol", "activation"]));
+  if (sidecar.id === undefined) fail(`${label}.id is required`);
+  validateExportName(`${label}.id`, sidecar.id);
+  validatePathField(packageDir, label, sidecar, "bin", "Sidecar binary");
+  if (sidecar.protocol !== sidecarProtocol) {
+    fail(`${label}.protocol must be "${sidecarProtocol}"`);
   }
-  if (!["manual", "onActivation", "onStartup"].includes(sidecar.activation)) {
-    fail(`runtime.sidecars.${name}.activation must be manual, onActivation, or onStartup`);
+  if (sidecar.activation !== undefined && !sidecarActivationModes.has(sidecar.activation)) {
+    fail(`${label}.activation must be manual, onEnable, or onStartup`);
   }
-  if (sidecar.args !== undefined) assertStringArray(sidecar.args, `runtime.sidecars.${name}.args`);
-  if (sidecar.env !== undefined) validateStringRecord(sidecar.env, `runtime.sidecars.${name}.env`);
-  if (sidecar.platforms !== undefined) {
-    assertStringArray(sidecar.platforms, `runtime.sidecars.${name}.platforms`);
-    const supported = new Set(["darwin", "linux", "win32"]);
-    for (const platformName of sidecar.platforms) {
-      if (!supported.has(platformName)) {
-        fail(`runtime.sidecars.${name}.platforms contains unsupported platform '${platformName}'`);
+  if (sidecar.args !== undefined) assertStringArray(sidecar.args, `${label}.args`);
+  if (sidecar.env !== undefined) validateStringRecord(sidecar.env, `${label}.env`);
+  if (sidecar.platforms !== undefined) assertStringArray(sidecar.platforms, `${label}.platforms`);
+  if (sidecar.activation === undefined) sidecar.activation = "onEnable";
+}
+
+function validateContributionCommands(packageDir, commands = []) {
+  if (!Array.isArray(commands)) {
+    fail("manifest.contributes.commands must be an array");
+  }
+  const ids = new Set();
+  for (const [index, command] of Object.entries(commands)) {
+    const label = `manifest.contributes.commands[${index}]`;
+    assertPlainObject(command, label);
+    assertAllowedKeys(command, label, new Set(["id", "title", "category", "icon"]));
+    validateExportName(`${label}.id`, command.id);
+    if (ids.has(command.id)) fail(`${label}.id is duplicated`);
+    ids.add(command.id);
+    validateOptionalString(command.title, `${label}.title`);
+    validateOptionalString(command.category, `${label}.category`);
+    validateOptionalString(command.icon, `${label}.icon`);
+  }
+}
+
+function validateContributionServices(packageDir, services = [], sidecarIds) {
+  if (!Array.isArray(services)) {
+    fail("manifest.contributes.services must be an array");
+  }
+  const ids = new Set();
+  for (const [index, service] of Object.entries(services)) {
+    const label = `manifest.contributes.services[${index}]`;
+    assertPlainObject(service, label);
+    assertAllowedKeys(service, label, new Set(["id", "runtime", "methods", "schema"]));
+    validateExportName(`${label}.id`, service.id);
+    if (ids.has(service.id)) fail(`${label}.id is duplicated`);
+    ids.add(service.id);
+    if (service.runtime !== undefined) {
+      if (typeof service.runtime !== "string" || service.runtime.trim() === "") {
+        fail(`${label}.runtime must be a non-empty string`);
+      }
+      if (service.runtime === "node") {
+        // valid
+      } else if (service.runtime.startsWith("sidecar:")) {
+        if (!sidecarRuntimePattern.test(service.runtime)) {
+          fail(`${label}.runtime must be "node" or "sidecar:<id>"`);
+        }
+        const sidecarId = service.runtime.slice("sidecar:".length);
+        if (!sidecarIds.has(sidecarId)) {
+          fail(`${label}.runtime references unknown runtime.sidecars id '${sidecarId}'`);
+        }
+      } else {
+        fail(`${label}.runtime must be "node" or "sidecar:<id>"`);
       }
     }
+    if (service.methods !== undefined) assertStringArray(service.methods, `${label}.methods`);
+    validateOptionalPathField(packageDir, label, service, "schema", "Service schema");
   }
 }
 
-function validateContributes(packageDir, contributes) {
-  assertPlainObject(contributes, "manifest.contributes");
-  const expected = new Set(v3ContributionMaps);
-  for (const key of Object.keys(contributes)) {
-    if (!expected.has(key)) fail(`manifest.contributes.${key} is not supported`);
+function validateContributionVisuals(packageDir, visuals = []) {
+  if (!Array.isArray(visuals)) {
+    fail("manifest.contributes.visuals must be an array");
   }
-  for (const mapName of v3ContributionMaps) {
-    assertPlainObject(contributes[mapName], `manifest.contributes.${mapName}`);
-  }
-
-  for (const [name, command] of Object.entries(contributes.commands)) {
-    assertPlainObject(command, `contributes.commands.${name}`);
-    validateOptionalString(command.title, `contributes.commands.${name}.title`);
-    validateOptionalString(command.category, `contributes.commands.${name}.category`);
-    validateOptionalString(command.icon, `contributes.commands.${name}.icon`);
-  }
-
-  for (const [name, service] of Object.entries(contributes.services)) {
-    assertPlainObject(service, `contributes.services.${name}`);
-    validateOptionalString(service.title, `contributes.services.${name}.title`);
-    validateOptionalString(service.sidecar, `contributes.services.${name}.sidecar`);
-    if (service.methods !== undefined) assertStringArray(service.methods, `contributes.services.${name}.methods`);
-    validateOptionalPathField(packageDir, `contributes.services.${name}`, service, "schema", "Service schema");
-  }
-
-  for (const [name, visual] of Object.entries(contributes.visuals)) {
-    assertPlainObject(visual, `contributes.visuals.${name}`);
-    validateOptionalString(visual.title, `contributes.visuals.${name}.title`);
-    validateOptionalString(visual.description, `contributes.visuals.${name}.description`);
-    validateBuiltEntry(packageDir, "contributes.visuals", name, visual);
-    validateDefaultSize(visual.defaultSize, `contributes.visuals.${name}.defaultSize`);
-    validateOptionalPathField(packageDir, `contributes.visuals.${name}`, visual, "settings", "Visual settings schema");
-  }
-
-  for (const mapName of ["views", "pages", "overlays", "webviews"]) {
-    for (const [name, webview] of Object.entries(contributes[mapName])) {
-      assertPlainObject(webview, `contributes.${mapName}.${name}`);
-      validateOptionalString(webview.title, `contributes.${mapName}.${name}.title`);
-      validateOptionalString(webview.description, `contributes.${mapName}.${name}.description`);
-      if (webview.entry === undefined && webview.path === undefined) {
-        fail(`contributes.${mapName}.${name} must declare entry or path`);
+  const ids = new Set();
+  for (const [index, visual] of Object.entries(visuals)) {
+    const label = `manifest.contributes.visuals[${index}]`;
+    assertPlainObject(visual, label);
+    assertAllowedKeys(visual, label, new Set(["id", "kind", "entry", "defaultSize", "instanceSettings", "remoteCompatible"]));
+    validateExportName(`${label}.id`, visual.id);
+    if (ids.has(visual.id)) fail(`${label}.id is duplicated`);
+    ids.add(visual.id);
+    if (visual.entry === undefined) fail(`${label}.entry is required`);
+    validateBuiltEntry(packageDir, "contributes.visuals", index, visual);
+    if (visual.kind !== undefined) {
+      if (!allowedVisualKinds.has(visual.kind)) {
+        fail(`${label}.kind must be overlay, config, or external`);
       }
-      if (webview.entry !== undefined) validateBuiltEntry(packageDir, `contributes.${mapName}`, name, webview);
-      validateOptionalPathField(packageDir, `contributes.${mapName}.${name}`, webview, "path", `${mapName} path`);
-      validateOptionalString(webview.icon, `contributes.${mapName}.${name}.icon`);
-      validateOptionalString(webview.configuration, `contributes.${mapName}.${name}.configuration`);
-      validateOptionalString(webview.route, `contributes.${mapName}.${name}.route`);
-      validateDefaultSize(webview.defaultSize, `contributes.${mapName}.${name}.defaultSize`);
     }
-  }
-
-  for (const [name, configuration] of Object.entries(contributes.configuration)) {
-    assertPlainObject(configuration, `contributes.configuration.${name}`);
-    validateOptionalString(configuration.title, `contributes.configuration.${name}.title`);
-    validateOptionalString(configuration.description, `contributes.configuration.${name}.description`);
-    validatePathField(packageDir, `contributes.configuration.${name}`, configuration, "schema", "Configuration schema");
-  }
-
-  for (const [name, asset] of Object.entries(contributes.assets)) {
-    assertPlainObject(asset, `contributes.assets.${name}`);
-    validatePathField(packageDir, `contributes.assets.${name}`, asset, "path", "Asset");
-  }
-
-  for (const [name, schema] of Object.entries(contributes.schemas)) {
-    assertPlainObject(schema, `contributes.schemas.${name}`);
-    validatePathField(packageDir, `contributes.schemas.${name}`, schema, "path", "Schema");
-  }
-}
-
-function validateDiagnostics(diagnostics) {
-  if (diagnostics === undefined) return;
-  assertPlainObject(diagnostics, "manifest.diagnostics");
-  if (diagnostics.enabled !== undefined && typeof diagnostics.enabled !== "boolean") {
-    fail("manifest.diagnostics.enabled must be a boolean");
-  }
-  validateOptionalString(diagnostics.channel, "manifest.diagnostics.channel");
-}
-
-function validateV3ContributionReferences(manifest) {
-  const sidecars = manifest.runtime.sidecars ?? {};
-  for (const [name, service] of Object.entries(manifest.contributes.services)) {
-    if (service.sidecar !== undefined && !Object.prototype.hasOwnProperty.call(sidecars, service.sidecar)) {
-      fail(`contributes.services.${name}.sidecar must reference a declared runtime.sidecars entry`);
+    validateDefaultSize(visual.defaultSize, `${label}.defaultSize`);
+    validateOptionalPathField(packageDir, label, visual, "instanceSettings", "Visual instance settings schema");
+    if (visual.remoteCompatible !== undefined && typeof visual.remoteCompatible !== "boolean") {
+      fail(`${label}.remoteCompatible must be a boolean`);
     }
   }
 }
 
-function validateCapabilities(capabilities) {
-  assertPlainObject(capabilities, "manifest.capabilities");
-  const permissions = capabilities.permissions ?? {};
-  assertPlainObject(permissions, "manifest.capabilities.permissions");
-  const bus = permissions.bus ?? {};
-  const registry = permissions.registry ?? {};
-  const network = permissions.network ?? {};
-  assertPlainObject(bus, "manifest.capabilities.permissions.bus");
-  assertPlainObject(registry, "manifest.capabilities.permissions.registry");
-  assertPlainObject(network, "manifest.capabilities.permissions.network");
-  for (const [key, value] of Object.entries(bus)) {
-    if (key !== "read" && key !== "publish") fail(`manifest.capabilities.permissions.bus.${key} is not supported`);
-    assertStringArray(value, `manifest.capabilities.permissions.bus.${key}`);
+function validateContributesSettings(packageDir, settings) {
+  if (settings === undefined) return;
+  assertPlainObject(settings, "manifest.contributes.settings");
+  if (Object.prototype.hasOwnProperty.call(settings, "ui")) {
+    fail("manifest.contributes.settings.ui is not supported yet");
   }
-  for (const [key, value] of Object.entries(registry)) {
-    if (key !== "read" && key !== "write") fail(`manifest.capabilities.permissions.registry.${key} is not supported`);
-    assertStringArray(value, `manifest.capabilities.permissions.registry.${key}`);
+  for (const key of Object.keys(settings)) {
+    if (key !== "schema") {
+      fail(`manifest.contributes.settings.${key} is not supported`);
+    }
   }
-  for (const [key, value] of Object.entries(network)) {
-    if (key !== "http" && key !== "websocket") fail(`manifest.capabilities.permissions.network.${key} is not supported`);
-    assertStringArray(value, `manifest.capabilities.permissions.network.${key}`);
+  if (Object.prototype.hasOwnProperty.call(settings, "schema")) {
+    validateOptionalPathField(packageDir, "manifest.contributes.settings", settings, "schema", "Settings schema");
   }
-  if (permissions.storage !== undefined) assertStringArray(permissions.storage, "manifest.capabilities.permissions.storage");
 }
 
-function validatePackageV3(packageDir, manifest) {
-  if (manifest.kind !== "trusted") fail("manifest.kind must be trusted for bakingrl.plugin/3 packages");
+function validatePackageRuntime(packageDir, manifest) {
+  if (manifest.runtime === undefined) return new Set();
   const runtime = assertPlainObject(manifest.runtime, "manifest.runtime");
-  const extensionHost = assertPlainObject(runtime.extensionHost, "manifest.runtime.extensionHost");
-  validateBuiltEntry(packageDir, "runtime", "extensionHost", extensionHost);
-  const sidecars = runtime.sidecars;
-  assertPlainObject(sidecars, "manifest.runtime.sidecars");
-  for (const [name, sidecar] of Object.entries(sidecars)) {
-    validateV3Sidecar(packageDir, name, sidecar);
+  assertAllowedKeys(runtime, "manifest.runtime", new Set(["node", "sidecars"]));
+  if (runtime.node !== undefined) {
+    assertPlainObject(runtime.node, "manifest.runtime.node");
+    assertAllowedKeys(runtime.node, "manifest.runtime.node", new Set(["entry"]));
+    validateBuiltEntry(packageDir, "manifest.runtime", "node", runtime.node);
   }
-  const activation = assertPlainObject(manifest.activation, "manifest.activation");
-  assertStringArray(activation.events, "manifest.activation.events", { allowEmpty: false });
-  validateContributes(packageDir, manifest.contributes);
-  validateV3ContributionReferences(manifest);
-  validateCapabilities(manifest.capabilities);
-  validatePackageSettingsSchema(packageDir, manifest.settings);
-  validateDiagnostics(manifest.diagnostics);
+  const sidecarIds = new Set();
+  if (runtime.sidecars !== undefined) {
+    if (!Array.isArray(runtime.sidecars)) {
+      fail("manifest.runtime.sidecars must be an array");
+    }
+    for (const [index, sidecar] of Object.entries(runtime.sidecars)) {
+      validateRuntimeSidecar(packageDir, sidecar, index);
+      if (sidecarIds.has(sidecar.id)) fail(`manifest.runtime.sidecars[${index}].id is duplicated`);
+      sidecarIds.add(sidecar.id);
+    }
+  }
+  return sidecarIds;
 }
 
-function validateSettingsProperty(label, property) {
-  if (!property || typeof property !== "object" || Array.isArray(property)) {
-    fail(`${label} must be a JSON Schema property object`);
+function validateContributesSection(manifest, packageDir, sidecarIds) {
+  const contributes = manifest.contributes ?? {};
+  if (contributes !== undefined) {
+    assertPlainObject(contributes, "manifest.contributes");
   }
-  const type = Array.isArray(property.type) ? property.type.filter((entry) => entry !== "null")[0] : property.type;
-  const inferredType = type ?? inferSettingsPropertyType(property);
-  const supported = new Set(["string", "number", "integer", "boolean", "array"]);
-  if (!supported.has(inferredType)) {
-    fail(`${label}.type must be string, number, integer, boolean, or an enum-backed array`);
+  for (const key of Object.keys(contributes)) {
+    if (!supportedContributionSections.has(key)) fail(`manifest.contributes.${key} is not supported`);
   }
-  if (property["x-bakingrl-secret"] === true) {
-    if (inferredType !== "string") {
-      fail(`${label} is a secret and must use type "string"`);
-    }
-    if (Object.prototype.hasOwnProperty.call(property, "default")) {
-      fail(`${label} is a secret and must not declare a default value`);
+  for (const legacyGroup of legacyContributeGroups) {
+    if (Object.prototype.hasOwnProperty.call(contributes, legacyGroup)) {
+      fail(`manifest.contributes.${legacyGroup} is not supported`);
     }
   }
-  if (inferredType === "array") {
-    const itemType = property.items ? inferSettingsPropertyType(property.items) : null;
-    const itemOptions = property.items?.enum ?? property.items?.oneOf ?? property.items?.anyOf;
-    if (!itemType || !itemOptions) {
-      fail(`${label} arrays must declare primitive options on items`);
+  validateContributionCommands(packageDir, contributes.commands);
+  validateContributionServices(packageDir, contributes.services, sidecarIds);
+  validateContributionVisuals(packageDir, contributes.visuals);
+  validateContributesSettings(packageDir, contributes.settings);
+}
+
+function validateRuntimeRef(label, value, sidecarIds = null) {
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be a non-empty string`);
+  }
+  if (value === "node") return;
+  if (sidecarRuntimePattern.test(value)) {
+    const sidecarId = value.slice("sidecar:".length);
+    if (sidecarIds && !sidecarIds.has(sidecarId)) {
+      fail(`${label} references unknown runtime.sidecars id '${sidecarId}'`);
     }
+    return;
+  }
+  fail(`${label} must be "node" or "sidecar:<id>"`);
+}
+
+function validateExternalSurfaces(manifest, sidecarIds) {
+  if (manifest.externalSurfaces === undefined) return;
+  if (Object.prototype.hasOwnProperty.call(manifest.externalSurfaces, "web")) {
+    fail("manifest.externalSurfaces.web is not supported yet");
+  }
+  if (Object.prototype.hasOwnProperty.call(manifest.externalSurfaces, "remote")) {
+    fail("manifest.externalSurfaces.remote is not supported yet");
+  }
+  assertAllowedKeys(manifest.externalSurfaces, "manifest.externalSurfaces", new Set(["obs"]));
+  if (manifest.externalSurfaces.obs !== undefined) {
+    assertAllowedKeys(manifest.externalSurfaces.obs, "manifest.externalSurfaces.obs", new Set(["runtime"]));
+    validateRuntimeRef("manifest.externalSurfaces.obs.runtime", manifest.externalSurfaces.obs.runtime, sidecarIds);
   }
 }
 
-function inferSettingsPropertyType(property) {
-  if (Array.isArray(property.enum) && property.enum.length) {
-    const firstType = typeof property.enum[0];
-    if (property.enum.every((entry) => typeof entry === firstType) && ["string", "number", "boolean"].includes(firstType)) {
-      return firstType === "number" ? "number" : firstType;
-    }
-  }
-  if (property.items) return "array";
-  return property.type ?? "string";
+function validatePackageV4(packageDir, manifest) {
+  const sidecarIds = validatePackageRuntime(packageDir, manifest);
+  validateContributesSection(manifest, packageDir, sidecarIds);
+  validateExternalSurfaces(manifest, sidecarIds);
 }
 
 function validatePackage(packageDir, { print = true } = {}) {
   const manifest = readPackageManifest(packageDir);
   validateRuntimeCompatibility(manifest);
-  validatePackageV3(packageDir, manifest);
+  validatePackageV4(packageDir, manifest);
   if (print) console.log(`Package validation passed: ${manifest.id}`);
   return manifest;
 }
@@ -549,34 +525,6 @@ function validateListing(packageDir, { print = true } = {}) {
   return { manifest, listing, repoParts };
 }
 
-function effectivePermissions(manifest) {
-  const packageScope = `plugin.${manifest.id}.*`;
-  const storageScope = "plugin://self/*";
-  const permissions = manifest.capabilities?.permissions ?? {};
-  const bus = permissions.bus ?? {};
-  const registry = permissions.registry ?? {};
-  const network = permissions.network ?? {};
-  const storageRequested = Array.isArray(permissions.storage) && permissions.storage.includes(storageScope);
-  return {
-    bus: {
-      read: Array.isArray(bus.read) ? bus.read : [],
-      publish: Array.isArray(bus.publish) ? bus.publish.filter((pattern) => pattern === packageScope) : []
-    },
-    registry: {
-      read: Array.isArray(registry.read) ? registry.read : [],
-      write: Array.isArray(registry.write) ? registry.write.filter((pattern) => pattern === packageScope) : []
-    },
-    network: {
-      http: Array.isArray(network.http) ? network.http : [],
-      websocket: Array.isArray(network.websocket) ? network.websocket : []
-    },
-    storage: {
-      read: storageRequested ? [storageScope] : [],
-      write: storageRequested ? [storageScope] : []
-    }
-  };
-}
-
 function findBundlePath(packageDir, manifest) {
   const bundlePath = join(packageDir, "dist-bundles", `${manifest.id}-${manifest.version}.brlp`);
   if (!existsSync(bundlePath)) fail(`Missing packed bundle: ${bundlePath}`);
@@ -619,7 +567,7 @@ function releaseMetadata(packageDir, args) {
     bundleUrl,
     bundleSha256: sha256File(bundlePath),
     signaturePublicKey: readSignaturePublicKey(packageDir),
-    runtimeApi: manifest.compatibility?.runtimeApi ?? null,
+    runtimeApi: manifest.bakingrlApi ?? null,
     generatedAt: new Date().toISOString()
   };
   writeOrPrintJson(metadata, options.output ? resolve(process.cwd(), options.output) : null);
@@ -647,11 +595,10 @@ function marketplaceEntry(packageDir, args) {
         bundleUrl,
         bundleSha256: sha256File(bundlePath),
         signaturePublicKey: readSignaturePublicKey(packageDir),
-        runtimeApi: manifest.compatibility?.runtimeApi ?? null,
+        runtimeApi: manifest.bakingrlApi ?? null,
         review: {
           status: "approved",
-          reviewedAt,
-          permissions: effectivePermissions(manifest)
+          reviewedAt
         }
       }
     ]
@@ -900,57 +847,56 @@ function collectBuildEntries(manifest) {
     if (typeof entry === "string") entries.push({ kind, name, entry });
   };
 
-  addEntry("runtime.extensionHost", "extensionHost", manifest.runtime?.extensionHost?.entry);
-  for (const [name, visual] of Object.entries(manifest.contributes?.visuals ?? {})) {
-    addEntry("contributes.visuals", name, visual.entry);
+  addEntry("runtime.node", "node", manifest.runtime?.node?.entry);
+  for (const sidecar of manifest.runtime?.sidecars ?? []) {
+    addEntry("runtime.sidecars", sidecar.id, sidecar.bin);
   }
-  for (const mapName of ["views", "pages", "overlays", "webviews"]) {
-    for (const [name, webview] of Object.entries(manifest.contributes?.[mapName] ?? {})) {
-      addEntry(`contributes.${mapName}`, name, webview.entry);
-    }
+  for (const visual of manifest.contributes?.visuals ?? []) {
+    addEntry("contributes.visuals", visual.id, visual.entry);
   }
   return entries;
 }
 
 function doctor(packageDir) {
   const manifest = validatePackage(packageDir, { print: false });
+  const { schemaVersion: manifestSchemaVersion, bakingrlApi: manifestBakingrlApi } = manifest;
   const summary = {
     ok: true,
     packageDir,
     id: manifest.id,
     name: manifest.name,
     version: manifest.version,
-    schema: manifest.schema,
-    kind: manifest.kind ?? null,
-    runtimeApi: manifest.compatibility?.runtimeApi ?? null,
-    supportedRuntimeApiRange,
+    schemaVersion: manifestSchemaVersion,
+    bakingrlApi: manifestBakingrlApi ?? null,
     checks: {
       manifest: true,
       runtimeCompatibility: true,
       buildEntries: true
     },
-    buildEntries: collectBuildEntries(manifest)
+    buildEntries: collectBuildEntries(manifest),
+    sidecars: (manifest.runtime?.sidecars ?? []).map((sidecar) => sidecar.id),
+    externalSurfaces: manifest.externalSurfaces ?? null,
+    contributes: {
+      commands: (manifest.contributes?.commands ?? []).map((command) => command.id),
+      services: (manifest.contributes?.services ?? []).map((service) => service.id),
+      visuals: (manifest.contributes?.visuals ?? []).map((visual) => visual.id),
+      settings: manifest.contributes?.settings ?? null
+    }
   };
-  summary.sidecars = Object.keys(manifest.runtime.sidecars);
-  summary.activation = manifest.activation;
-  summary.contributes = Object.fromEntries(v3ContributionMaps.map((name) => [name, Object.keys(manifest.contributes[name])]));
   console.log(JSON.stringify(summary, null, 2));
 }
 
 function inspect(packageDir) {
   const manifest = validatePackage(packageDir, { print: false });
+  const { schemaVersion: manifestSchemaVersion, bakingrlApi: manifestBakingrlApi } = manifest;
   const summary = {
     id: manifest.id,
-    schema: manifest.schema,
-    kind: manifest.kind,
+    schemaVersion: manifestSchemaVersion,
     version: manifest.version,
-    compatibility: manifest.compatibility,
-    settings: manifest.settings ?? null,
-    diagnostics: manifest.diagnostics ?? null,
+    bakingrlApi: manifestBakingrlApi ?? null,
     runtime: manifest.runtime,
-    activation: manifest.activation,
     contributes: manifest.contributes ?? {},
-    capabilities: manifest.capabilities ?? {}
+    externalSurfaces: manifest.externalSurfaces ?? null
   };
   console.log(JSON.stringify(summary, null, 2));
 }

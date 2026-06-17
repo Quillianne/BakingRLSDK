@@ -1,58 +1,25 @@
 {
-  "schema": "bakingrl.plugin/3",
-  "kind": "trusted",
+  "schemaVersion": "bakingrl.plugin/4",
+  "bakingrlApi": "2.0.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
   "author": "Your Name",
-  "compatibility": {
-    "runtimeApi": "__RUNTIME_API_VERSION__",
-    "sdk": "__PLUGIN_SDK_VERSION__"
-  },
   "runtime": {
-    "extensionHost": {
+    "node": {
       "entry": "dist/extension/index.js"
     },
-    "sidecars": {}
-  },
-  "activation": {
-    "events": ["onStartup"]
+    "sidecars": []
   },
   "contributes": {
-    "commands": {},
-    "services": {},
-    "visuals": {},
-    "views": {},
-    "pages": {},
-    "overlays": {},
-    "webviews": {
-      "home": {
-        "title": "__PLUGIN_NAME__",
-        "entry": "dist/webviews/home.js"
+    "commands": [],
+    "services": [],
+    "visuals": [
+      {
+        "id": "home",
+        "entry": "dist/visuals/home.js"
       }
-    },
-    "configuration": {},
-    "assets": {},
-    "schemas": {}
-  },
-  "capabilities": {
-    "permissions": {
-      "bus": {
-        "read": [],
-        "publish": ["plugin.__PLUGIN_ID__.*"]
-      },
-      "registry": {
-        "read": [],
-        "write": []
-      },
-      "network": {
-        "http": [],
-        "websocket": []
-      },
-      "storage": ["plugin://self/*"]
-    }
-  },
-  "diagnostics": {
-    "enabled": true
+    ],
+    "settings": {}
   }
 }

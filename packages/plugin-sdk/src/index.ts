@@ -1,8 +1,7 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "1.0.3";
-export const RUNTIME_API_VERSION = "1.0.0";
-export const SUPPORTED_RUNTIME_API_RANGE = ">=1.0.0 <2.0.0";
+export const SDK_VERSION = "2.0.0";
+export const RUNTIME_API_VERSION = "2.0.0";
 
 export * from "./telemetry.js";
 
@@ -18,6 +17,11 @@ export type BakingRLEvent<TData = unknown, TEvent extends string = string> = {
 export type BakingRLEventData<TEvent extends string> = TEvent extends RlTelemetryEventName
   ? RlTelemetryPayloadByEvent[TEvent]
   : unknown;
+
+export type ContextState = {
+  get<TValue = unknown>(key: string): Promise<TValue | null>;
+  set<TValue = unknown>(key: string, value: TValue): Promise<void>;
+};
 
 export type VisualContext = {
   root: HTMLElement;
@@ -48,9 +52,12 @@ export type VisualContext = {
   setActive(active: boolean): void;
   bus: VisualBus;
   registry: ReadonlyRegistry;
+  state: ContextState;
   services: ServiceCaller;
   assets: AssetResolver;
-  diagnostics: Diagnostics;
+  diagnostics: ExtensionDiagnostics;
+  telemetry: ExtensionTelemetry;
+  secrets: ExtensionSecretReader;
 };
 
 export type VisualEditorContext = {
@@ -102,23 +109,10 @@ export type Diagnostics = {
 };
 
 export type RuntimeApiVersion = typeof RUNTIME_API_VERSION;
-export type SupportedRuntimeApiRange = typeof SUPPORTED_RUNTIME_API_RANGE;
 
 export type ExtensionMode = "development" | "production" | "test";
 
 export type ExtensionKind = "extensionHost";
-
-export type ActivationEvent =
-  | "*"
-  | "onStartup"
-  | "onStartupFinished"
-  | `onCommand:${string}`
-  | `onView:${string}`
-  | `onPage:${string}`
-  | `onOverlay:${string}`
-  | `onService:${string}`
-  | `onConfiguration:${string}`
-  | `workspaceContains:${string}`;
 
 export type ExtensionSubscription = {
   dispose(): void | Promise<void>;
@@ -191,7 +185,7 @@ export type ExtensionTelemetry = {
 };
 
 export type ExtensionWebviewController = {
-  declared: Record<string, ContributionWebview>;
+  declared: Record<string, never>;
   open(id: string, options?: unknown): Promise<unknown>;
   close(id: string): Promise<unknown>;
 };
@@ -207,7 +201,7 @@ export type ExtensionContext = {
   extensionPath: string;
   storagePath: string;
   settings: SettingsReader & Record<string, unknown>;
-  configuration: SettingsReader & Record<string, unknown>;
+  state: ContextState;
   extension?: {
     id: string;
     name: string;
@@ -277,70 +271,56 @@ export type ExtensionOverlayRegistry = {
   registerOverlay(id: string, provider: ExtensionViewProvider): ExtensionSubscription;
 };
 
-export type RuntimeExtensionHost = {
+export type RuntimeSidecarProtocol = "jsonrpc-stdio";
+export type RuntimeSidecarActivation = "manual" | "onEnable" | "onStartup";
+export type RuntimeSidecarPlatform =
+  | "darwin-arm64"
+  | "darwin-x64"
+  | "linux-arm64"
+  | "linux-x64"
+  | "windows-x64"
+  | (string & {});
+
+export type RuntimeNodeDeclaration = {
   entry: string;
 };
 
-export type RuntimeSidecarProtocol = "jsonrpc-stdio";
-export type RuntimeSidecarActivation = "manual" | "onActivation" | "onStartup";
-export type RuntimeSidecarPlatform = "darwin" | "linux" | "win32";
-
 export type RuntimeSidecar = {
-  command: string;
+  id: string;
+  bin: string;
   args?: string[];
   env?: Record<string, string>;
   platforms?: RuntimeSidecarPlatform[];
   protocol: RuntimeSidecarProtocol;
-  activation: RuntimeSidecarActivation;
+  activation?: RuntimeSidecarActivation;
 };
 
 export type RuntimeDeclaration = {
-  extensionHost: RuntimeExtensionHost;
-  sidecars: Record<string, RuntimeSidecar>;
+  node?: RuntimeNodeDeclaration;
+  sidecars?: RuntimeSidecar[];
 };
 
 export type ContributionCommand = {
-  title: string;
+  id: string;
+  title?: string;
   category?: string;
   icon?: string;
 };
 
 export type ContributionService = {
-  title?: string;
+  id: string;
+  runtime?: "node" | `sidecar:${string}`;
   methods?: string[];
-  sidecar?: string;
   schema?: string;
 };
 
 export type ContributionVisual = {
-  title?: string;
-  description?: string;
+  id: string;
+  kind?: "overlay" | "config" | "external";
   entry: string;
   defaultSize?: [number, number];
-  settings?: string;
-};
-
-export type ContributionWebview = {
-  title?: string;
-  description?: string;
-  entry?: string;
-  path?: string;
-  icon?: string;
-  configuration?: string;
-};
-
-export type ContributionPage = ContributionWebview & {
-  route?: string;
-};
-
-export type ContributionOverlay = ContributionWebview & {
-  defaultSize?: [number, number];
-};
-
-export type ContributionConfiguration = {
-  title?: string;
-  description?: string;
-  schema: string;
+  instanceSettings?: string;
+  remoteCompatible?: boolean;
 };
 
 export type ContributionAsset = {
@@ -351,84 +331,32 @@ export type ContributionSchema = {
   path: string;
 };
 
-export type PluginManifestV3Contributes = {
-  commands: Record<string, ContributionCommand>;
-  services: Record<string, ContributionService>;
-  visuals: Record<string, ContributionVisual>;
-  views: Record<string, ContributionWebview>;
-  pages: Record<string, ContributionPage>;
-  overlays: Record<string, ContributionOverlay>;
-  webviews: Record<string, ContributionWebview>;
-  configuration: Record<string, ContributionConfiguration>;
-  assets: Record<string, ContributionAsset>;
-  schemas: Record<string, ContributionSchema>;
+export type ContributionSettings = {
+  schema?: string;
 };
 
-export type ExtensionCapability =
-  | "commands"
-  | "services"
-  | "visuals"
-  | "views"
-  | "pages"
-  | "overlays"
-  | "webviews"
-  | "configuration"
-  | "assets"
-  | "schemas"
-  | "secrets"
-  | "storage"
-  | "network"
-  | "sidecars";
+export type PluginManifestV4Contributes = {
+  visuals?: ContributionVisual[];
+  settings?: ContributionSettings;
+  services?: ContributionService[];
+  commands?: ContributionCommand[];
+};
 
-export type PluginCapabilityDeclaration = Partial<Record<ExtensionCapability, boolean | string[]>>;
-
-export type ManifestPermissionDeclaration = {
-  bus?: {
-    read?: string[];
-    publish?: string[];
+export type PluginManifestV4ExternalSurfaces = {
+  obs?: {
+    runtime: "node" | `sidecar:${string}`;
   };
-  registry?: {
-    read?: string[];
-    write?: string[];
-  };
-  network?: {
-    http?: string[];
-    websocket?: string[];
-  };
-  storage?: string[];
 };
 
-export type PluginManifestV3Capabilities = PluginCapabilityDeclaration & {
-  permissions: ManifestPermissionDeclaration;
-};
-
-export type PluginManifestV3Activation = {
-  events: ActivationEvent[];
-};
-
-export type PluginManifestV3 = {
-  schema: "bakingrl.plugin/3";
-  kind: "trusted";
+export type PluginManifestV4 = {
+  schemaVersion: "bakingrl.plugin/4";
   id: string;
   name: string;
   version: string;
-  publisher?: string;
-  author?: string;
-  description?: string;
-  license?: string;
-  compatibility: ManifestCompatibility;
-  activation: PluginManifestV3Activation;
-  runtime: RuntimeDeclaration;
-  contributes: PluginManifestV3Contributes;
-  capabilities: PluginManifestV3Capabilities;
-  settings?: string;
-  diagnostics?: {
-    enabled?: boolean;
-    channel?: string;
-  };
-  safeMode?: {
-    supported?: boolean;
-  };
+  bakingrlApi: "2.0.0";
+  runtime?: RuntimeDeclaration;
+  contributes?: PluginManifestV4Contributes;
+  externalSurfaces?: PluginManifestV4ExternalSurfaces;
 };
 
 export type WebviewMessage<TType extends string = string, TPayload = unknown> = {
@@ -479,11 +407,6 @@ export type VisualEditorAction = {
   run(context: VisualContext): void | Promise<void>;
 };
 
-export type ManifestCompatibility = {
-  runtimeApi: string;
-  sdk?: string;
-};
-
 export type ManifestVisualExport = {
   entry: string;
   defaultSize?: [number, number];
@@ -526,13 +449,6 @@ export function createWebviewBridge(endpoint: WebviewEndpoint): WebviewBridge {
     on(handler) {
       return endpoint.onMessage(handler);
     }
-  };
-}
-
-export function currentCompatibility(): ManifestCompatibility {
-  return {
-    runtimeApi: RUNTIME_API_VERSION,
-    sdk: SDK_VERSION
   };
 }
 
@@ -615,13 +531,33 @@ export function createMockVisualContext(
         return ref;
       }
     },
+    state: {
+      async get() {
+        return null;
+      },
+      async set() {}
+    },
+    telemetry: {
+      async event() {}
+    },
+    secrets: {
+      async get() {
+        return undefined;
+      },
+      async configured() {
+        return false;
+      }
+    },
     diagnostics: consoleDiagnostics(),
     ...partial
   };
 }
 
-function consoleDiagnostics(): Diagnostics {
+function consoleDiagnostics(): ExtensionDiagnostics {
   return {
+    info(message, data) {
+      console.info(message, data);
+    },
     log(message, data) {
       console.log(message, data);
     },

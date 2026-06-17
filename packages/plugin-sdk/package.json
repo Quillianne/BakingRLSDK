@@ -1,6 +1,6 @@
 {
   "name": "@bakingrl/plugin-sdk",
-  "version": "1.0.3",
+  "version": "2.0.0",
   "description": "Types and helpers for BakingRL plugin packages.",
   "type": "module",
   "license": "MIT",

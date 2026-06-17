@@ -7,7 +7,7 @@ export default defineConfig({
       preserveEntrySignatures: "strict",
       input: {
         "extension/index": "src/extension/index.ts",
-        "overlays/main": "src/overlays/main/index.ts"
+        "visuals/main": "src/overlays/main/index.ts"
       },
       output: {
         entryFileNames: "[name].js",

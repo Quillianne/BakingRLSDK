@@ -1,68 +1,36 @@
 {
-  "schema": "bakingrl.plugin/3",
-  "kind": "trusted",
+  "schemaVersion": "bakingrl.plugin/4",
+  "bakingrlApi": "2.0.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
   "author": "Your Name",
-  "compatibility": {
-    "runtimeApi": "__RUNTIME_API_VERSION__",
-    "sdk": "__PLUGIN_SDK_VERSION__"
-  },
   "runtime": {
-    "extensionHost": {
+    "node": {
       "entry": "dist/extension/index.js"
     },
-    "sidecars": {
-      "native-helper": {
-        "command": "sidecars/native-helper/target/release/__PLUGIN_SLUG__-sidecar",
+    "sidecars": [
+      {
+        "id": "native-helper",
+        "bin": "sidecars/native-helper/target/release/__PLUGIN_SLUG__-sidecar",
         "args": [],
         "env": {},
-        "platforms": ["darwin", "linux"],
+        "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
         "protocol": "jsonrpc-stdio",
-        "activation": "onActivation"
+        "activation": "onEnable"
       }
-    }
-  },
-  "activation": {
-    "events": ["onStartup"]
+    ]
   },
   "contributes": {
-    "commands": {},
-    "services": {
-      "native": {
-        "title": "Native Helper",
-        "sidecar": "native-helper",
+    "commands": [],
+    "services": [
+      {
+        "id": "native",
+        "runtime": "sidecar:native-helper",
         "methods": ["ping"]
       }
-    },
-    "visuals": {},
-    "views": {},
-    "pages": {},
-    "overlays": {},
-    "webviews": {},
-    "configuration": {},
-    "assets": {},
-    "schemas": {}
-  },
-  "capabilities": {
-    "permissions": {
-      "bus": {
-        "read": [],
-        "publish": ["plugin.__PLUGIN_ID__.*"]
-      },
-      "registry": {
-        "read": [],
-        "write": []
-      },
-      "network": {
-        "http": [],
-        "websocket": []
-      },
-      "storage": ["plugin://self/*"]
-    }
-  },
-  "diagnostics": {
-    "enabled": true
+    ],
+    "visuals": [],
+    "settings": {}
   }
 }
