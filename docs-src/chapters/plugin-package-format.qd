@@ -14,7 +14,8 @@ BakingRL packages are described by `bakingrl.plugin.json`. Current packages use
   "id": "com.example.extension",
   "name": "Example Extension",
   "version": "1.0.0",
-  "bakingrlApi": "2.0.0",
+  "bakingrlApi": "2.1.0",
+  "dependencies": [],
   "runtime": {
     "node": {
       "entry": "dist/extension/index.js"
@@ -25,6 +26,10 @@ BakingRL packages are described by `bakingrl.plugin.json`. Current packages use
     "commands": [],
     "services": [],
     "visuals": [],
+    "webviews": [],
+    "extensionPoints": [],
+    "contributions": [],
+    "resources": [],
     "settings": {
       "schema": "schemas/settings.json"
     }
@@ -40,8 +45,9 @@ Must be `bakingrl.plugin/4` for current packages.
 
 `bakingrlApi`
 
-Top-level contract version. Must be exact `2.0.0` for the current V4 runtime
-contract.
+Top-level contract version. New packages should declare exact `2.1.0` for the
+current V4 runtime contract. The helper CLI accepts compatible `2.x` manifests
+up to the current runtime API.
 
 `id`
 
@@ -51,6 +57,13 @@ Stable package identity. Use reverse-DNS style values such as
 `name` and `version`
 
 Standard package metadata.
+
+`dependencies`
+
+Optional package-to-package dependency declarations. Required dependencies must
+be installed, enabled, and version-compatible before the host can activate the
+dependent package. Optional dependencies may be absent, but contributions that
+target another package still need an explicit dependency entry.
 
 `runtime`
 
@@ -100,7 +113,11 @@ declared `runtime.sidecars` entry.
 - `commands`: command IDs and display metadata;
 - `services`: service metadata and method schemas;
 - `visuals`: browser entries mounted by host pages and overlays;
-- `settings`: optional settings metadata.
+- `webviews`: browser entries opened by the host as tools, settings, or panels;
+- `settings`: optional settings metadata;
+- `extensionPoints`: interfaces a platform package exposes to other packages;
+- `contributions`: package-local contributions targeting an extension point;
+- `resources`: package-local public or private content.
 
 Services are discovered from the manifest, but live implementations are
 registered from extension host code:
@@ -131,7 +148,103 @@ export const { activate, deactivate } = defineExtension({
 
 The runtime context includes commands, services, bus, registry, storage,
 settings, secrets metadata, webviews, overlays, sidecars, telemetry,
-diagnostics, and logger APIs.
+diagnostics, plugin graph discovery, resources, and logger APIs.
+
+## Dependencies, Extension Points, And Contributions
+
+Dependencies are declared at the top level:
+
+```json
+{
+  "dependencies": [
+    {
+      "packageId": "com.example.overlay_studio",
+      "version": "^1.0.0",
+      "optional": false
+    }
+  ]
+}
+```
+
+Platform packages expose extension points:
+
+```json
+{
+  "contributes": {
+    "extensionPoints": [
+      {
+        "id": "visuals",
+        "version": "1.0.0",
+        "title": "Overlay visuals",
+        "description": "Visual entries accepted by the overlay platform.",
+        "schema": "schemas/overlay-visual.json",
+        "service": "catalog"
+      }
+    ]
+  }
+}
+```
+
+Contributor packages target an extension point with
+`package.id/extensionPointId`. External targets require a matching dependency:
+
+```json
+{
+  "contributes": {
+    "contributions": [
+      {
+        "id": "compact-scorebug",
+        "target": "com.example.overlay_studio/visuals",
+        "kind": "widget",
+        "title": "Compact Scorebug",
+        "dataSchema": "schemas/scorebug.json",
+        "visual": "scorebug",
+        "service": "scorebug",
+        "resources": ["logos"],
+        "metadata": {
+          "accent": "blue"
+        }
+      }
+    ]
+  }
+}
+```
+
+`visual`, `service`, and `resources` reference local declarations in the same
+manifest. The host resolves the graph, hides unusable contributions when a
+dependency is missing or disabled, and exposes the resolved graph through SDK
+runtime APIs.
+
+## Resources And Webviews
+
+Resources are package-relative files or directories:
+
+```json
+{
+  "contributes": {
+    "resources": [
+      {
+        "id": "logos",
+        "paths": ["assets/logos"],
+        "type": "image-set",
+        "visibility": "public"
+      }
+    ],
+    "webviews": [
+      {
+        "id": "inspector",
+        "entry": "dist/webviews/inspector.js",
+        "title": "Inspector",
+        "kind": "panel",
+        "defaultSize": [480, 360]
+      }
+    ]
+  }
+}
+```
+
+A resource must declare either `path` or `paths`, never both. `visibility`
+defaults to `private`. Public resources must declare `type`.
 
 ## Bus And Registry Namespaces
 
@@ -166,7 +279,12 @@ Sidecars are declared in an array:
         "env": {},
         "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
         "protocol": "jsonrpc-stdio",
-        "activation": "onEnable"
+        "activation": "onEnable",
+        "healthCheck": {
+          "method": "ping",
+          "intervalMs": 5000,
+          "timeoutMs": 1000
+        }
       }
     ]
   }
@@ -243,5 +361,5 @@ npm run pack -- --sign signing-key.json
 ```
 
 The host inspects archives before installation and should reject unsafe paths,
-unsupported schemas, packages without exact `bakingrlApi: "2.0.0"`, unsupported
-V4 fields, hash mismatches, and invalid signatures.
+unsupported schemas, incompatible `bakingrlApi` values, unsupported V4 fields,
+hash mismatches, and invalid signatures.

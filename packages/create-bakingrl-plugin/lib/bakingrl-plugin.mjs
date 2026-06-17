@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
-const runtimeApiVersion = "2.0.0";
+const runtimeApiVersion = "2.1.0";
 const allowedTopLevelFields = new Set([
   "schemaVersion",
   "id",
@@ -15,15 +15,26 @@ const allowedTopLevelFields = new Set([
   "version",
   "author",
   "bakingrlApi",
+  "dependencies",
   "runtime",
   "contributes",
   "externalSurfaces"
 ]);
 const rejectedTopLevelFields = ["schema", "compatibility", "capabilities", "kind", "activation", "settings", "diagnostics", "safeMode"];
-const legacyContributeGroups = ["views", "pages", "overlays", "webviews", "configuration", "assets", "schemas"];
-const supportedContributionSections = new Set(["commands", "services", "visuals", "settings"]);
+const legacyContributeGroups = ["views", "pages", "overlays", "configuration", "assets", "schemas"];
+const supportedContributionSections = new Set([
+  "commands",
+  "services",
+  "visuals",
+  "settings",
+  "extensionPoints",
+  "contributions",
+  "resources",
+  "webviews"
+]);
 const supportedExternalSurfaces = new Set(["obs", "web", "remote"]);
 const allowedVisualKinds = new Set(["overlay", "config", "external"]);
+const allowedWebviewKinds = new Set(["tool", "settings", "panel"]);
 const sidecarRuntimePattern = /^sidecar:[a-zA-Z0-9._-]+$/;
 const sidecarActivationModes = new Set(["manual", "onEnable", "onStartup"]);
 const sidecarProtocol = "jsonrpc-stdio";
@@ -63,18 +74,21 @@ function isInsideDirectory(parentDir, childPath) {
   return childRelative !== ".." && !childRelative.startsWith(`..${sep}`) && !childRelative.startsWith("/");
 }
 
-function validatePackageId(value) {
+function validatePackageId(value, label = "manifest.id") {
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be a non-empty string`);
+  }
   if (value === "." || value === ".." || value.startsWith(".") || value.endsWith(".")) {
-    fail("manifest.id must not contain empty or dot-only path segments");
+    fail(`${label} must not contain empty or dot-only path segments`);
   }
   if (value.split(".").some((segment) => segment.length === 0)) {
-    fail("manifest.id must not contain empty dot-separated segments");
+    fail(`${label} must not contain empty dot-separated segments`);
   }
   if (value.startsWith("plugin.")) {
-    fail("manifest.id must not include the reserved 'plugin.' runtime prefix");
+    fail(`${label} must not include the reserved 'plugin.' runtime prefix`);
   }
   if (!/^[A-Za-z0-9._-]+$/.test(value)) {
-    fail("manifest.id contains unsupported characters");
+    fail(`${label} contains unsupported characters`);
   }
 }
 
@@ -128,10 +142,56 @@ function assertStringArray(value, label, { allowEmpty = true } = {}) {
   return value;
 }
 
+function parseRuntimeApi(value) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
+  if (!match) return null;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3])
+  };
+}
+
+function compareRuntimeApi(left, right) {
+  for (const key of ["major", "minor", "patch"]) {
+    if (left[key] !== right[key]) return left[key] - right[key];
+  }
+  return 0;
+}
+
+function validateSemverRange(value, label) {
+  if (value === undefined) return;
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be a non-empty semver range`);
+  }
+  const trimmed = value.trim();
+  const token = String.raw`(?:v?\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.-]+)?|\d+\.x|\d+\.\*|\*)`;
+  const comparator = String.raw`(?:[\^~]|>=|<=|>|<|=)?\s*${token}`;
+  const rangePattern = new RegExp(String.raw`^${comparator}(?:\s+(?:-\s+)?${comparator})*(?:\s*\|\|\s*${comparator}(?:\s+(?:-\s+)?${comparator})*)*$`);
+  if (!rangePattern.test(trimmed)) {
+    fail(`${label} must be a semver range such as "^1.0.0", ">=1.0.0 <2.0.0", or "*"`);
+  }
+}
+
+function validateSemverVersion(value, label) {
+  if (value === undefined) return;
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be a non-empty semver version`);
+  }
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(value.trim())) {
+    fail(`${label} must be a semver version such as "1.0.0"`);
+  }
+}
+
 function validateRuntimeCompatibility(manifest) {
   const runtimeApi = manifest.bakingrlApi;
-  if (runtimeApi !== runtimeApiVersion) {
-    fail(`manifest.bakingrlApi must be "${runtimeApiVersion}"`);
+  const current = parseRuntimeApi(runtimeApiVersion);
+  const declared = parseRuntimeApi(runtimeApi);
+  if (!declared) {
+    fail("manifest.bakingrlApi must be an exact semver version");
+  }
+  if (declared.major !== current.major || compareRuntimeApi(declared, current) > 0) {
+    fail(`manifest.bakingrlApi must be compatible with "${runtimeApiVersion}"`);
   }
 }
 
@@ -151,20 +211,24 @@ function validateBuiltEntry(packageDir, groupName, name, exportDef) {
   }
 }
 
-function validatePathField(packageDir, label, object, field, artifactLabel) {
-  if (typeof object?.[field] !== "string" || object[field].trim() === "") {
-    fail(`${label}.${field} must point to a ${artifactLabel.toLowerCase()} file`);
+function validatePackageRelativePath(packageDir, label, rawPath, artifactLabel) {
+  if (typeof rawPath !== "string" || rawPath.trim() === "") {
+    fail(`${label} must point to a ${artifactLabel.toLowerCase()} file`);
   }
-  const artifactPath = resolve(packageDir, object[field]);
+  const artifactPath = resolve(packageDir, rawPath);
   if (!isInsideDirectory(packageDir, artifactPath)) {
-    fail(`${label}.${field} must stay inside the package`);
+    fail(`${label} must stay inside the package`);
   }
   if (!existsSync(artifactPath)) {
-    fail(`${artifactLabel} does not exist: ${object[field]}`);
+    fail(`${artifactLabel} does not exist: ${rawPath}`);
   }
   if (statSync(artifactPath).isFile() && statSync(artifactPath).size === 0) {
-    fail(`${artifactLabel} is empty: ${object[field]}`);
+    fail(`${artifactLabel} is empty: ${rawPath}`);
   }
+}
+
+function validatePathField(packageDir, label, object, field, artifactLabel) {
+  validatePackageRelativePath(packageDir, `${label}.${field}`, object?.[field], artifactLabel);
 }
 
 function validateOptionalPathField(packageDir, label, object, field, artifactLabel) {
@@ -182,6 +246,21 @@ function validateExportName(label, value) {
   if (typeof value !== "string" || value.trim() === "") {
     fail(`${label} must be a non-empty string`);
   }
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    fail(`${label} must contain only letters, numbers, "_" and "-"`);
+  }
+}
+
+function validateExtensionPointId(label, value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be a non-empty string`);
+  }
+  if (value === "." || value === ".." || value.startsWith(".") || value.endsWith(".")) {
+    fail(`${label} must not contain empty or dot-only path segments`);
+  }
+  if (value.split(".").some((segment) => segment.length === 0)) {
+    fail(`${label} must not contain empty dot-separated segments`);
+  }
   if (!/^[A-Za-z0-9._-]+$/.test(value)) {
     fail(`${label} must contain only letters, numbers, ".", "_" and "-"`);
   }
@@ -196,6 +275,38 @@ function validateStringRecord(value, label) {
   }
 }
 
+function validateJsonValue(value, label) {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    if (typeof value === "number" && !Number.isFinite(value)) fail(`${label} must be JSON-serializable`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => validateJsonValue(entry, `${label}[${index}]`));
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) validateJsonValue(entry, `${label}.${key}`);
+    return;
+  }
+  fail(`${label} must be JSON-serializable`);
+}
+
+function validateJsonObject(value, label) {
+  assertPlainObject(value, label);
+  validateJsonValue(value, label);
+}
+
+function validatePositiveNumber(value, label) {
+  if (!Number.isFinite(value) || value <= 0) {
+    fail(`${label} must be a positive number`);
+  }
+}
+
 function validateDefaultSize(value, label) {
   if (value === undefined) return;
   if (!Array.isArray(value) || value.length !== 2 || value.some((entry) => !Number.isFinite(entry) || entry <= 0)) {
@@ -203,10 +314,19 @@ function validateDefaultSize(value, label) {
   }
 }
 
+function validateSidecarHealthCheck(value, label) {
+  if (value === undefined) return;
+  assertPlainObject(value, label);
+  assertAllowedKeys(value, label, new Set(["method", "intervalMs", "timeoutMs"]));
+  validateExportName(`${label}.method`, value.method);
+  if (value.intervalMs !== undefined) validatePositiveNumber(value.intervalMs, `${label}.intervalMs`);
+  if (value.timeoutMs !== undefined) validatePositiveNumber(value.timeoutMs, `${label}.timeoutMs`);
+}
+
 function validateRuntimeSidecar(packageDir, sidecar, index) {
   const label = `manifest.runtime.sidecars[${index}]`;
   assertPlainObject(sidecar, label);
-  assertAllowedKeys(sidecar, label, new Set(["id", "bin", "args", "env", "platforms", "protocol", "activation"]));
+  assertAllowedKeys(sidecar, label, new Set(["id", "bin", "args", "env", "platforms", "protocol", "activation", "healthCheck"]));
   if (sidecar.id === undefined) fail(`${label}.id is required`);
   validateExportName(`${label}.id`, sidecar.id);
   validatePathField(packageDir, label, sidecar, "bin", "Sidecar binary");
@@ -219,6 +339,7 @@ function validateRuntimeSidecar(packageDir, sidecar, index) {
   if (sidecar.args !== undefined) assertStringArray(sidecar.args, `${label}.args`);
   if (sidecar.env !== undefined) validateStringRecord(sidecar.env, `${label}.env`);
   if (sidecar.platforms !== undefined) assertStringArray(sidecar.platforms, `${label}.platforms`);
+  validateSidecarHealthCheck(sidecar.healthCheck, `${label}.healthCheck`);
   if (sidecar.activation === undefined) sidecar.activation = "onEnable";
 }
 
@@ -238,6 +359,7 @@ function validateContributionCommands(packageDir, commands = []) {
     validateOptionalString(command.category, `${label}.category`);
     validateOptionalString(command.icon, `${label}.icon`);
   }
+  return ids;
 }
 
 function validateContributionServices(packageDir, services = [], sidecarIds) {
@@ -273,6 +395,7 @@ function validateContributionServices(packageDir, services = [], sidecarIds) {
     if (service.methods !== undefined) assertStringArray(service.methods, `${label}.methods`);
     validateOptionalPathField(packageDir, label, service, "schema", "Service schema");
   }
+  return ids;
 }
 
 function validateContributionVisuals(packageDir, visuals = []) {
@@ -300,6 +423,7 @@ function validateContributionVisuals(packageDir, visuals = []) {
       fail(`${label}.remoteCompatible must be a boolean`);
     }
   }
+  return ids;
 }
 
 function validateContributesSettings(packageDir, contributes) {
@@ -327,6 +451,196 @@ function validateContributesSettings(packageDir, contributes) {
   }
 }
 
+function validateDependencies(manifest) {
+  const dependencies = manifest.dependencies;
+  const ids = new Set();
+  if (dependencies === undefined) return ids;
+  if (!Array.isArray(dependencies)) {
+    fail("manifest.dependencies must be an array");
+  }
+  for (const [index, dependency] of Object.entries(dependencies)) {
+    const label = `manifest.dependencies[${index}]`;
+    assertPlainObject(dependency, label);
+    assertAllowedKeys(dependency, label, new Set(["packageId", "version", "optional"]));
+    validatePackageId(dependency.packageId, `${label}.packageId`);
+    if (dependency.packageId === manifest.id) {
+      fail(`${label}.packageId must not reference the package itself`);
+    }
+    if (ids.has(dependency.packageId)) fail(`${label}.packageId is duplicated`);
+    ids.add(dependency.packageId);
+    validateSemverRange(dependency.version, `${label}.version`);
+    if (dependency.optional !== undefined && typeof dependency.optional !== "boolean") {
+      fail(`${label}.optional must be a boolean`);
+    }
+  }
+  return ids;
+}
+
+function parseExtensionTarget(value, label) {
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be formatted as "package.id/extensionPointId"`);
+  }
+  const slashIndex = value.indexOf("/");
+  if (slashIndex <= 0 || slashIndex !== value.lastIndexOf("/") || slashIndex === value.length - 1) {
+    fail(`${label} must be formatted as "package.id/extensionPointId"`);
+  }
+  const packageId = value.slice(0, slashIndex);
+  const extensionPointId = value.slice(slashIndex + 1);
+  validatePackageId(packageId, `${label} package id`);
+  validateExtensionPointId(`${label} extension point id`, extensionPointId);
+  return { packageId, extensionPointId };
+}
+
+function validateContributionExtensionPoints(packageDir, extensionPoints = [], serviceIds) {
+  if (!Array.isArray(extensionPoints)) {
+    fail("manifest.contributes.extensionPoints must be an array");
+  }
+  const ids = new Set();
+  for (const [index, extensionPoint] of Object.entries(extensionPoints)) {
+    const label = `manifest.contributes.extensionPoints[${index}]`;
+    assertPlainObject(extensionPoint, label);
+    assertAllowedKeys(extensionPoint, label, new Set(["id", "version", "title", "description", "schema", "service"]));
+    validateExtensionPointId(`${label}.id`, extensionPoint.id);
+    if (ids.has(extensionPoint.id)) fail(`${label}.id is duplicated`);
+    ids.add(extensionPoint.id);
+    validateSemverVersion(extensionPoint.version, `${label}.version`);
+    validateOptionalString(extensionPoint.title, `${label}.title`);
+    validateOptionalString(extensionPoint.description, `${label}.description`);
+    validateOptionalPathField(packageDir, label, extensionPoint, "schema", "Extension point schema");
+    if (extensionPoint.service !== undefined) {
+      validateExportName(`${label}.service`, extensionPoint.service);
+      if (!serviceIds.has(extensionPoint.service)) {
+        fail(`${label}.service references unknown contributes.services id '${extensionPoint.service}'`);
+      }
+    }
+  }
+  return ids;
+}
+
+function validateContributionResources(packageDir, resources = []) {
+  if (!Array.isArray(resources)) {
+    fail("manifest.contributes.resources must be an array");
+  }
+  const ids = new Set();
+  for (const [index, resource] of Object.entries(resources)) {
+    const label = `manifest.contributes.resources[${index}]`;
+    assertPlainObject(resource, label);
+    assertAllowedKeys(resource, label, new Set(["id", "path", "paths", "type", "visibility", "metadata"]));
+    validateExportName(`${label}.id`, resource.id);
+    if (ids.has(resource.id)) fail(`${label}.id is duplicated`);
+    ids.add(resource.id);
+    const hasPath = Object.prototype.hasOwnProperty.call(resource, "path");
+    const hasPaths = Object.prototype.hasOwnProperty.call(resource, "paths");
+    if (hasPath && hasPaths) fail(`${label} must declare either path or paths, not both`);
+    if (!hasPath && !hasPaths) fail(`${label} must declare path or paths`);
+    if (hasPath) {
+      validatePackageRelativePath(packageDir, `${label}.path`, resource.path, "Resource");
+    }
+    if (hasPaths) {
+      assertStringArray(resource.paths, `${label}.paths`, { allowEmpty: false });
+      resource.paths.forEach((path, pathIndex) => {
+        validatePackageRelativePath(packageDir, `${label}.paths[${pathIndex}]`, path, "Resource");
+      });
+    }
+    const visibility = resource.visibility ?? "private";
+    if (visibility !== "public" && visibility !== "private") {
+      fail(`${label}.visibility must be public or private`);
+    }
+    if (visibility === "public" && (typeof resource.type !== "string" || resource.type.trim() === "")) {
+      fail(`${label}.type is required for public resources`);
+    }
+    if (resource.type !== undefined && (typeof resource.type !== "string" || resource.type.trim() === "")) {
+      fail(`${label}.type must be a non-empty string`);
+    }
+    if (resource.metadata !== undefined) validateJsonObject(resource.metadata, `${label}.metadata`);
+  }
+  return ids;
+}
+
+function validateContributionWebviews(packageDir, webviews = []) {
+  if (!Array.isArray(webviews)) {
+    fail("manifest.contributes.webviews must be an array");
+  }
+  const ids = new Set();
+  for (const [index, webview] of Object.entries(webviews)) {
+    const label = `manifest.contributes.webviews[${index}]`;
+    assertPlainObject(webview, label);
+    assertAllowedKeys(webview, label, new Set(["id", "entry", "title", "kind", "defaultSize"]));
+    validateExportName(`${label}.id`, webview.id);
+    if (ids.has(webview.id)) fail(`${label}.id is duplicated`);
+    ids.add(webview.id);
+    if (webview.entry === undefined) fail(`${label}.entry is required`);
+    validateBuiltEntry(packageDir, "contributes.webviews", index, webview);
+    validateOptionalString(webview.title, `${label}.title`);
+    if (webview.kind !== undefined && !allowedWebviewKinds.has(webview.kind)) {
+      fail(`${label}.kind must be tool, settings, or panel`);
+    }
+    validateDefaultSize(webview.defaultSize, `${label}.defaultSize`);
+  }
+  return ids;
+}
+
+function validateContributionContributions(packageDir, manifest, contributions = [], dependencyIds, extensionPointIds, visualIds, serviceIds, resourceIds) {
+  if (!Array.isArray(contributions)) {
+    fail("manifest.contributes.contributions must be an array");
+  }
+  const ids = new Set();
+  for (const [index, contribution] of Object.entries(contributions)) {
+    const label = `manifest.contributes.contributions[${index}]`;
+    assertPlainObject(contribution, label);
+    assertAllowedKeys(contribution, label, new Set([
+      "id",
+      "target",
+      "kind",
+      "title",
+      "description",
+      "dataSchema",
+      "visual",
+      "service",
+      "resources",
+      "metadata"
+    ]));
+    validateExportName(`${label}.id`, contribution.id);
+    if (ids.has(contribution.id)) fail(`${label}.id is duplicated`);
+    ids.add(contribution.id);
+    const target = parseExtensionTarget(contribution.target, `${label}.target`);
+    if (target.packageId === manifest.id) {
+      if (!extensionPointIds.has(target.extensionPointId)) {
+        fail(`${label}.target references unknown local extension point '${target.extensionPointId}'`);
+      }
+    } else if (!dependencyIds.has(target.packageId)) {
+      fail(`${label}.target references external package '${target.packageId}' without a matching manifest.dependencies entry`);
+    }
+    validateOptionalString(contribution.kind, `${label}.kind`);
+    validateOptionalString(contribution.title, `${label}.title`);
+    validateOptionalString(contribution.description, `${label}.description`);
+    validateOptionalPathField(packageDir, label, contribution, "dataSchema", "Contribution data schema");
+    if (contribution.visual !== undefined) {
+      validateExportName(`${label}.visual`, contribution.visual);
+      if (!visualIds.has(contribution.visual)) {
+        fail(`${label}.visual references unknown contributes.visuals id '${contribution.visual}'`);
+      }
+    }
+    if (contribution.service !== undefined) {
+      validateExportName(`${label}.service`, contribution.service);
+      if (!serviceIds.has(contribution.service)) {
+        fail(`${label}.service references unknown contributes.services id '${contribution.service}'`);
+      }
+    }
+    if (contribution.resources !== undefined) {
+      assertStringArray(contribution.resources, `${label}.resources`);
+      for (const resourceId of contribution.resources) {
+        validateExportName(`${label}.resources[]`, resourceId);
+        if (!resourceIds.has(resourceId)) {
+          fail(`${label}.resources references unknown contributes.resources id '${resourceId}'`);
+        }
+      }
+    }
+    if (contribution.metadata !== undefined) validateJsonObject(contribution.metadata, `${label}.metadata`);
+  }
+  return ids;
+}
+
 function validatePackageRuntime(packageDir, manifest) {
   if (manifest.runtime === undefined) return new Set();
   const runtime = assertPlainObject(manifest.runtime, "manifest.runtime");
@@ -350,7 +664,7 @@ function validatePackageRuntime(packageDir, manifest) {
   return sidecarIds;
 }
 
-function validateContributesSection(manifest, packageDir, sidecarIds) {
+function validateContributesSection(manifest, packageDir, sidecarIds, dependencyIds) {
   const contributes = manifest.contributes ?? {};
   if (contributes !== undefined) {
     assertPlainObject(contributes, "manifest.contributes");
@@ -364,8 +678,21 @@ function validateContributesSection(manifest, packageDir, sidecarIds) {
     }
   }
   validateContributionCommands(packageDir, contributes.commands);
-  validateContributionServices(packageDir, contributes.services, sidecarIds);
-  validateContributionVisuals(packageDir, contributes.visuals);
+  const serviceIds = validateContributionServices(packageDir, contributes.services, sidecarIds);
+  const visualIds = validateContributionVisuals(packageDir, contributes.visuals);
+  const extensionPointIds = validateContributionExtensionPoints(packageDir, contributes.extensionPoints, serviceIds);
+  const resourceIds = validateContributionResources(packageDir, contributes.resources);
+  validateContributionWebviews(packageDir, contributes.webviews);
+  validateContributionContributions(
+    packageDir,
+    manifest,
+    contributes.contributions,
+    dependencyIds,
+    extensionPointIds,
+    visualIds,
+    serviceIds,
+    resourceIds
+  );
   validateContributesSettings(packageDir, contributes);
 }
 
@@ -401,8 +728,9 @@ function validateExternalSurfaces(manifest, sidecarIds) {
 }
 
 function validatePackageV4(packageDir, manifest) {
+  const dependencyIds = validateDependencies(manifest);
   const sidecarIds = validatePackageRuntime(packageDir, manifest);
-  validateContributesSection(manifest, packageDir, sidecarIds);
+  validateContributesSection(manifest, packageDir, sidecarIds, dependencyIds);
   validateExternalSurfaces(manifest, sidecarIds);
 }
 
@@ -895,6 +1223,9 @@ function collectBuildEntries(manifest) {
   for (const visual of manifest.contributes?.visuals ?? []) {
     addEntry("contributes.visuals", visual.id, visual.entry);
   }
+  for (const webview of manifest.contributes?.webviews ?? []) {
+    addEntry("contributes.webviews", webview.id, webview.entry);
+  }
   return entries;
 }
 
@@ -915,12 +1246,17 @@ function doctor(packageDir) {
       buildEntries: true
     },
     buildEntries: collectBuildEntries(manifest),
+    dependencies: manifest.dependencies ?? [],
     sidecars: (manifest.runtime?.sidecars ?? []).map((sidecar) => sidecar.id),
     externalSurfaces: manifest.externalSurfaces ?? null,
     contributes: {
       commands: (manifest.contributes?.commands ?? []).map((command) => command.id),
       services: (manifest.contributes?.services ?? []).map((service) => service.id),
       visuals: (manifest.contributes?.visuals ?? []).map((visual) => visual.id),
+      extensionPoints: (manifest.contributes?.extensionPoints ?? []).map((extensionPoint) => extensionPoint.id),
+      contributions: (manifest.contributes?.contributions ?? []).map((contribution) => contribution.id),
+      resources: (manifest.contributes?.resources ?? []).map((resource) => resource.id),
+      webviews: (manifest.contributes?.webviews ?? []).map((webview) => webview.id),
       settings: manifest.contributes?.settings ?? null
     }
   };
@@ -935,6 +1271,7 @@ function inspect(packageDir) {
     schemaVersion: manifestSchemaVersion,
     version: manifest.version,
     bakingrlApi: manifestBakingrlApi ?? null,
+    dependencies: manifest.dependencies ?? [],
     runtime: manifest.runtime,
     contributes: manifest.contributes ?? {},
     externalSurfaces: manifest.externalSurfaces ?? null

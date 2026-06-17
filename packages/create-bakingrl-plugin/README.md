@@ -34,10 +34,11 @@ Generated packages include `scripts/bakingrl-plugin.mjs`, but the global
 and install V4 plugin packages during development.
 
 New packages declare `bakingrlApi` with the current BakingRL runtime API
-(`2.0.0`). The helper validates the exact current V4 contract,
-`bakingrlApi: "2.0.0"`.
+(`2.1.0`). The helper validates the current V4 contract and accepts compatible
+`2.x` package manifests up to the current runtime API.
 
 Current templates are `extension-plugin`, `overlay-plugin`, and
 `native-sidecar-plugin`. Package-level settings schema moved to
-`contributes.settings.schema` and remains host-owned. Visual entries are
-declared through `contributes.visuals` with an `id` and JS entry.
+`contributes.settings.schema` and remains host-owned. Browser visuals,
+webviews, extension points, contributions, and resources are declared through
+`contributes`.

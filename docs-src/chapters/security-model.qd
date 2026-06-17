@@ -19,6 +19,8 @@ The Rust/Tauri host owns:
 - the OBS gateway that serves package-owned OBS browser surfaces;
 - event bus and registry access checks;
 - extension host and sidecar supervision;
+- plugin dependency, extension point, contribution, and resource graph
+  resolution;
 - diagnostics and crash-loop detection.
 
 Plugin JavaScript runs outside the Tauri process in a Node extension host.
@@ -33,8 +35,9 @@ The host can reject obvious out-of-scope bus, registry, storage, and sidecar
 access, but access is enforced as host policy rather than as a strict manifest
 sandbox.
 
-`settings.ui`, `externalSurfaces.web`, and `externalSurfaces.remote` are not
-supported runtime surfaces in V4.
+Dependencies and contributions are declarations, not direct trust grants. The
+host still mediates service calls, resource reads, webview opening, and
+cross-package discovery at runtime.
 
 ## Safe Mode
 
@@ -62,8 +65,11 @@ The helper CLI and host inspect package archives for operational safety:
 - required `bakingrl.plugin.json`;
 - package-relative paths only;
 - no `../` path traversal;
-- supported schema and exact `bakingrlApi: "2.0.0"`;
+- supported schema and compatible `bakingrlApi`;
 - declared build entries and sidecar commands exist;
+- declared resources, schemas, webviews, and sidecar health checks stay inside
+  the package;
+- external contributions have matching dependency declarations;
 - optional hash and signature files match the artifact.
 
 Hashes and signatures help establish package provenance. They do not make code

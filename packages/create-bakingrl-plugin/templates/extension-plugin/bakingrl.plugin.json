@@ -1,6 +1,6 @@
 {
   "schemaVersion": "bakingrl.plugin/4",
-  "bakingrlApi": "2.0.0",
+  "bakingrlApi": "2.1.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
@@ -13,11 +13,21 @@
   },
   "contributes": {
     "commands": [],
-    "services": [],
-    "visuals": [
+    "services": [
+      {
+        "id": "ping",
+        "runtime": "node",
+        "methods": ["ping"]
+      }
+    ],
+    "visuals": [],
+    "webviews": [
       {
         "id": "home",
-        "entry": "dist/visuals/home.js"
+        "entry": "dist/webviews/home.js",
+        "title": "__PLUGIN_NAME__",
+        "kind": "tool",
+        "defaultSize": [480, 320]
       }
     ],
     "settings": {}

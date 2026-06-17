@@ -1,6 +1,6 @@
 {
   "schemaVersion": "bakingrl.plugin/4",
-  "bakingrlApi": "2.0.0",
+  "bakingrlApi": "2.1.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
@@ -20,6 +20,14 @@
         "kind": "overlay",
         "entry": "dist/visuals/main.js",
         "defaultSize": [640, 180]
+      }
+    ],
+    "extensionPoints": [
+      {
+        "id": "visuals",
+        "version": "1.0.0",
+        "title": "Overlay visuals",
+        "description": "Accepts package-declared overlay visual contributions."
       }
     ],
     "settings": {}

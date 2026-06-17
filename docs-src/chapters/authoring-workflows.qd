@@ -5,7 +5,9 @@
 
 Current BakingRL plugin authoring uses one model: trusted v4 packages with a
 JavaScript extension host, browser visuals, host-owned settings metadata, and
-first-class native sidecars.
+first-class native sidecars. Runtime API `2.1.0` also adds dependencies,
+extension points, contributions, resources, and declared webviews for plugin
+ecosystem chains.
 
 ## Development Loop
 
@@ -31,6 +33,9 @@ Use the extension entry for package logic:
 - call other services with `context.services.call`;
 - persist package state with `context.storage`;
 - publish package state with `context.bus.emit` and `context.registry.set`;
+- discover active plugins and contributions with `context.plugins` and
+  `context.extensions`;
+- read declared package resources with `context.resources`;
 - start or call native helpers with `context.sidecars`.
 
 The manifest `contributes.services` array is descriptive. The implementation is
@@ -53,9 +58,23 @@ Use `contributes.visuals` for reusable browser entries mounted by host-owned
 surfaces such as overlays and pages. Keep the browser entry small and
 communicate through the webview bridge.
 
+Use `contributes.webviews` for package tools, settings panels, and other
+host-opened browser windows that are not reusable overlay visuals.
+
 Host-owned settings should use JSON Schema through `contributes.settings`.
-Custom configuration visuals can be exposed by setting `contributes.settings.ui`
-to the id of a `contributes.visuals` entry whose `kind` is `config`.
+Custom configuration UI can be exposed by setting `contributes.settings.ui` to
+the id of a `contributes.visuals` entry whose `kind` is `config`.
+
+## Extension Points And Resources
+
+Use `contributes.extensionPoints` when a plugin is a platform for other
+plugins. Use `contributes.contributions` when a package contributes to another
+plugin's extension point. External contribution targets require a top-level
+`dependencies` entry.
+
+Use `contributes.resources` for package-local content such as images, presets,
+or JSON data. Public resources need a `type`; private resources remain owned by
+the declaring package unless the host allows another package to read them.
 
 ## Services
 
@@ -83,7 +102,7 @@ should not run inside the Tauri process. Declare them in `runtime.sidecars` and
 call them from `context.sidecars`.
 
 Sidecars speak JSON-RPC over stdio. BakingRL supervises start, stop, restart,
-logs, diagnostics, and crash-loop detection.
+logs, diagnostics, health checks, and crash-loop detection.
 
 ## Diagnostics
 

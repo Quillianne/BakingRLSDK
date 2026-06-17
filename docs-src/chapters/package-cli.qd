@@ -25,7 +25,7 @@ Available templates:
   sidecar.
 
 Generated packages declare `schemaVersion: "bakingrl.plugin/4"`, and
-`bakingrlApi: "2.0.0"`.
+`bakingrlApi: "2.1.0"`.
 
 ## Validate
 
@@ -35,16 +35,23 @@ bakingrl-plugin validate .
 
 Validation checks:
 
-- manifest schema, id, name, version, exact `bakingrlApi: "2.0.0"`, runtime,
-  contributes, host-owned settings, and external surfaces;
+- manifest schema, id, name, version, `bakingrlApi` compatibility, runtime,
+  dependencies, contributes, host-owned settings, and external surfaces;
 - built JavaScript entries for extension host and declared visuals;
 - sidecar command paths and `jsonrpc-stdio` declarations;
-- package-local paths for declared contribution assets and runtime entries;
+- sidecar health-check declarations when present;
+- package-local paths for declared contribution schemas, resources, webviews,
+  and runtime entries;
+- dependency-backed cross-package contributions;
+- local references from extension points and contributions to declared
+  services, visuals, and resources;
 - absence of bundled Node runtime binaries such as `node`, `node.exe`, or
   `bin/node*`.
 
-Current validation should reject unsupported V4 fields such as `settings.ui`,
-`externalSurfaces.web`, and `externalSurfaces.remote`.
+Current validation accepts `contributes.extensionPoints`,
+`contributes.contributions`, `contributes.resources`, and
+`contributes.webviews`. A contribution targeting another package must declare a
+matching top-level dependency.
 
 ## Doctor
 
@@ -52,8 +59,8 @@ Current validation should reject unsupported V4 fields such as `settings.ui`,
 bakingrl-plugin doctor .
 ```
 
-`doctor` prints a JSON summary of `bakingrlApi`, sidecars, contribution ids,
-and build entries.
+`doctor` prints a JSON summary of `bakingrlApi`, dependencies, sidecars,
+contribution ids, resources, webviews, and build entries.
 
 ## Inspect
 

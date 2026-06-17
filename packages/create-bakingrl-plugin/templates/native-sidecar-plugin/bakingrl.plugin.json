@@ -1,6 +1,6 @@
 {
   "schemaVersion": "bakingrl.plugin/4",
-  "bakingrlApi": "2.0.0",
+  "bakingrlApi": "2.1.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
@@ -17,7 +17,12 @@
         "env": {},
         "platforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
         "protocol": "jsonrpc-stdio",
-        "activation": "onEnable"
+        "activation": "onEnable",
+        "healthCheck": {
+          "method": "ping",
+          "intervalMs": 5000,
+          "timeoutMs": 1000
+        }
       }
     ]
   },

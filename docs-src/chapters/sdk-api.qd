@@ -5,7 +5,7 @@
 
 The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v4 plugin
 contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/4`,
-SDK `2.0.0`, and exact `bakingrlApi: "2.0.0"`.
+SDK `2.1.0`, and `bakingrlApi: "2.1.0"` for new packages.
 
 The SDK is an authoring contract. Runtime behavior is provided by the host:
 package loading, extension host supervision, bridge calls, service routing,
@@ -23,6 +23,8 @@ import {
   createCleanup,
   createMockVisualContext,
   createWebviewBridge,
+  createExtensionTarget,
+  createResourceRef,
   type ExtensionContext,
   type PluginManifestV4,
   type VisualContext,
@@ -78,6 +80,10 @@ export const deactivate = extension.deactivate;
 - `storage.readText` and `storage.writeText`;
 - `secrets.get` and `secrets.configured`;
 - `webviews.open`, `webviews.close`, and declared webview metadata;
+- `plugins.list`;
+- `extensions.points` and `extensions.contributions`;
+- `resources.list`, `resources.read`, `resources.readText`, and
+  `resources.readJson`;
 - `overlays.list` and `overlays.refresh`;
 - `sidecars.start`, `sidecars.stop`, `sidecars.restart`, and `sidecars.call`;
 - `telemetry.event`;
@@ -86,6 +92,25 @@ export const deactivate = extension.deactivate;
 Services are registered from `activate(context)`. The manifest only declares
 service names, methods, schemas, and optional sidecar links so the host can
 inspect packages before executing them.
+
+## Plugin Graph
+
+The host resolves package dependencies, extension points, and contributions.
+Extension host code reads the resolved graph through host-mediated APIs:
+
+```ts
+const plugins = await context.plugins.list();
+const points = await context.extensions.points({
+  packageId: "com.example.overlay_studio"
+});
+const contributions = await context.extensions.contributions(
+  "com.example.overlay_studio/visuals"
+);
+```
+
+`createExtensionTarget(packageId, extensionPointId)` formats a target string for
+manifest and runtime use. `context.extensions.contributions(...)` only returns
+contributions that the host considers usable for the current package graph.
 
 ## Visuals
 
@@ -153,6 +178,20 @@ The host owns windowing. Packages own declared OBS browser surfaces through
 surfaces. Browser entries should stay portable and only depend on the bridge and
 packaged assets.
 
+## Resources
+
+Resources declared in `contributes.resources` are resolved by the host:
+
+```ts
+const resources = await context.resources.list({
+  packageId: "com.example.content_pack"
+});
+const json = await context.resources.readJson("com.example.content_pack/logos");
+```
+
+Use `createResourceRef(packageId, resourceId)` when building resource refs.
+The host decides whether a private resource is readable by the caller.
+
 ## Sidecars
 
 Native code is not loaded into the Tauri process. Rust or other native helpers
@@ -169,10 +208,10 @@ The current protocol is JSON-RPC 2.0 over newline-delimited stdio.
 
 ## Utilities
 
-`SDK_VERSION` is `2.0.0`.
+`SDK_VERSION` is `2.1.0`.
 
-`RUNTIME_API_VERSION` is `2.0.0`, matching the manifest value
-`bakingrlApi: "2.0.0"`.
+`RUNTIME_API_VERSION` is `2.1.0`, matching the manifest value
+`bakingrlApi: "2.1.0"` used by new packages.
 
 `setting(settings, key, fallback)` reads a typed value with a fallback.
 

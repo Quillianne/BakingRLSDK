@@ -37,8 +37,8 @@ export default defineVisual({
 ```
 
 This SDK targets BakingRL trusted plugin package schema `bakingrl.plugin/4`,
-SDK version `2.0.0`, and exact `bakingrlApi: "2.0.0"` for the current V4
-runtime contract.
+SDK version `2.1.0`, and `bakingrlApi: "2.1.0"` for the current V4 runtime
+contract.
 
 See the repository `docs-src/` documentation for the full SDK API, manifest
 format, telemetry types, and security model.

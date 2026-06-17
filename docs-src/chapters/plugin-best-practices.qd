@@ -21,15 +21,15 @@ Use a native sidecar for heavier trusted work or platform-specific integration.
 Keep the public API small and expose the useful surface through an
 extension-host service.
 
-Use page and overlay templates to give users a starting point. Keep templates
-portable by relying on package contribution references and item settings rather
-than specific template IDs.
+Use extension points, contributions, and resources when a package is meant to
+be extended by other packages. Keep contribution metadata generic and let the
+platform plugin interpret domain-specific meaning.
 
 Use host-owned settings for package configuration. Custom configuration visuals
 can be referenced through `contributes.settings.ui` when the visual declares
-`kind: "config"`. Secret values must still stay host-owned; custom
-configuration visuals should use `context.configuration.secrets` only for
-configured state plus set/clear flows.
+`kind: "config"`. Secret
+values must still stay host-owned; custom configuration surfaces should use
+`context.configuration.secrets` only for configured state plus set/clear flows.
 
 ## Design The Runtime Data Flow
 

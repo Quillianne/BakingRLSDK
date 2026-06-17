@@ -1,7 +1,7 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "2.0.0";
-export const RUNTIME_API_VERSION = "2.0.0";
+export const SDK_VERSION = "2.1.0";
+export const RUNTIME_API_VERSION = "2.1.0";
 
 export * from "./telemetry.js";
 
@@ -252,9 +252,64 @@ export type ExtensionTelemetry = {
 };
 
 export type ExtensionWebviewController = {
-  declared: Record<string, never>;
+  declared: Record<string, ContributionWebview>;
   open(id: string, options?: unknown): Promise<unknown>;
   close(id: string): Promise<unknown>;
+};
+
+export type PluginDescriptor = {
+  id: string;
+  name: string;
+  version: string;
+  author?: string | null;
+  bakingrlApi: BakingRLCompatibleApiVersion | null;
+  enabled: boolean;
+  active: boolean;
+  dependencies: PluginDependency[];
+};
+
+export type ExtensionPluginController = {
+  list(): Promise<PluginDescriptor[]>;
+};
+
+export type ExtensionPointDescriptor = ContributionExtensionPoint & {
+  packageId: string;
+  reference: ExtensionPointTarget;
+};
+
+export type ExtensionContributionDescriptor = ContributionContribution & {
+  packageId: string;
+  reference: string;
+};
+
+export type ExtensionPointFilter = {
+  packageId?: string;
+};
+
+export type ExtensionContributionFilter = {
+  target?: ExtensionPointTarget;
+};
+
+export type ExtensionContributionController = {
+  points(filter?: ExtensionPointFilter): Promise<ExtensionPointDescriptor[]>;
+  contributions(target?: ExtensionPointTarget | ExtensionContributionFilter): Promise<ExtensionContributionDescriptor[]>;
+};
+
+export type ResourceDescriptor = ContributionResource & {
+  packageId: string;
+  reference: string;
+  public: boolean;
+};
+
+export type ResourceFilter = {
+  packageId?: string;
+};
+
+export type ExtensionResourceController = {
+  list(filter?: ResourceFilter): Promise<ResourceDescriptor[]>;
+  read(ref: string, path?: string): Promise<Uint8Array>;
+  readText(ref: string, path?: string): Promise<string>;
+  readJson<TValue = unknown>(ref: string, path?: string): Promise<TValue>;
 };
 
 export type ExtensionOverlayController = {
@@ -292,6 +347,9 @@ export type ExtensionContext = {
   pages?: ExtensionPageRegistry;
   overlays: ExtensionOverlayController;
   webviews: ExtensionWebviewController;
+  plugins: ExtensionPluginController;
+  extensions: ExtensionContributionController;
+  resources: ExtensionResourceController;
   sidecars: ExtensionSidecarController;
   telemetry: ExtensionTelemetry;
   assets?: AssetResolver;
@@ -362,6 +420,13 @@ export type RuntimeSidecar = {
   platforms?: RuntimeSidecarPlatform[];
   protocol: RuntimeSidecarProtocol;
   activation?: RuntimeSidecarActivation;
+  healthCheck?: RuntimeSidecarHealthCheck;
+};
+
+export type RuntimeSidecarHealthCheck = {
+  method: string;
+  intervalMs?: number;
+  timeoutMs?: number;
 };
 
 export type RuntimeDeclaration = {
@@ -370,6 +435,15 @@ export type RuntimeDeclaration = {
 };
 
 export type RuntimeRef = "node" | `sidecar:${string}`;
+export type BakingRLCompatibleApiVersion = `2.${number}.${number}`;
+export type ExtensionPointTarget = `${string}/${string}`;
+export type ResourceVisibility = "public" | "private";
+
+export type PluginDependency = {
+  packageId: string;
+  version?: string;
+  optional?: boolean;
+};
 
 export type ContributionCommand = {
   id: string;
@@ -407,11 +481,54 @@ export type ContributionSettings = {
   ui?: string;
 };
 
+export type ContributionExtensionPoint = {
+  id: string;
+  version?: string;
+  title?: string;
+  description?: string;
+  schema?: string;
+  service?: string;
+};
+
+export type ContributionContribution = {
+  id: string;
+  target: ExtensionPointTarget;
+  kind?: string;
+  title?: string;
+  description?: string;
+  dataSchema?: string;
+  visual?: string;
+  service?: string;
+  resources?: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type ContributionResource = {
+  id: string;
+  path?: string;
+  paths?: string[];
+  type?: string;
+  visibility?: ResourceVisibility;
+  metadata?: Record<string, unknown>;
+};
+
+export type ContributionWebview = {
+  id: string;
+  entry: string;
+  title?: string;
+  kind?: "tool" | "settings" | "panel";
+  defaultSize?: [number, number];
+};
+
 export type PluginManifestV4Contributes = {
   visuals?: ContributionVisual[];
   settings?: ContributionSettings;
   services?: ContributionService[];
   commands?: ContributionCommand[];
+  extensionPoints?: ContributionExtensionPoint[];
+  contributions?: ContributionContribution[];
+  resources?: ContributionResource[];
+  webviews?: ContributionWebview[];
 };
 
 export type PluginManifestV4ExternalSurfaces = {
@@ -429,7 +546,8 @@ export type PluginManifestV4 = {
   id: string;
   name: string;
   version: string;
-  bakingrlApi: "2.0.0";
+  bakingrlApi: BakingRLCompatibleApiVersion;
+  dependencies?: PluginDependency[];
   runtime?: RuntimeDeclaration;
   contributes?: PluginManifestV4Contributes;
   externalSurfaces?: PluginManifestV4ExternalSurfaces;
@@ -502,6 +620,25 @@ export function defineExtension<T extends ExtensionModule>(extension: T): T {
 
 export function defineVisual<T extends VisualExport>(visual: T): T {
   return visual;
+}
+
+export function createExtensionTarget(packageId: string, extensionPointId: string): ExtensionPointTarget {
+  return `${packageId}/${extensionPointId}` as ExtensionPointTarget;
+}
+
+export function parseExtensionTarget(target: string): { packageId: string; extensionPointId: string } | null {
+  const slashIndex = target.indexOf("/");
+  if (slashIndex <= 0 || slashIndex !== target.lastIndexOf("/") || slashIndex === target.length - 1) {
+    return null;
+  }
+  return {
+    packageId: target.slice(0, slashIndex),
+    extensionPointId: target.slice(slashIndex + 1)
+  };
+}
+
+export function createResourceRef(packageId: string, resourceId: string): string {
+  return `${packageId}/${resourceId}`;
 }
 
 export function createWebviewBridge(endpoint: WebviewEndpoint): WebviewBridge {
