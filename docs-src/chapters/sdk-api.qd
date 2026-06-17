@@ -208,16 +208,18 @@ Resources declared in `contributes.resources` are resolved by the host:
 
 ```ts
 const resources = await context.resources.list({
-  packageId: "com.example.content_pack"
+  packageId: "com.example.content_pack",
+  type: "application/json",
+  visibility: "public"
 });
 const json = await context.resources.readJson("com.example.content_pack/logos");
 ```
 
 Use `createResourceRef(packageId, resourceId)` when building resource refs.
-The host decides whether a private resource is readable by the caller.
-`ResourceFilter` currently scopes by `packageId`; `type` and `visibility`
-metadata are host-resolved and must not be treated as a bypass around resource
-policy.
+`ResourceFilter` can scope by package id, resource type, and declared
+visibility. The host still decides whether a private resource is readable by
+the caller, so `visibility: "private"` is a filter on host-visible resources,
+not a bypass around resource policy.
 
 ## Sidecars
 

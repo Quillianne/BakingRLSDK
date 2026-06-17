@@ -204,8 +204,10 @@ other plugins can discover them without BakingRL learning domain-specific
 meaning. The host validates paths and exposes approved resources through
 `context.resources.list()`, `context.resources.read()`,
 `context.resources.readText()`, and `context.resources.readJson()`. Resource
-listing is host-filtered; the current SDK filter is package-scoped, and any
-host-exposed `type` or `visibility` filtering must still preserve host policy.
+listing is host-filtered and can be scoped with `packageId`, `type`, and
+`visibility`. Filtering with `visibility: "private"` only asks for private
+resources that the host already allows the caller to see; it does not bypass
+resource policy.
 
 ## Registry And Storage
 

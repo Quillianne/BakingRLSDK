@@ -321,6 +321,8 @@ export type ResourceDescriptor = ContributionResource & {
 
 export type ResourceFilter = {
   packageId?: string;
+  type?: string;
+  visibility?: ResourceVisibility;
 };
 
 export type ExtensionResourceController = {
