@@ -453,7 +453,7 @@ export type RuntimeDeclaration = {
 };
 
 export type RuntimeRef = "node" | `sidecar:${string}`;
-export type BakingRLCompatibleApiVersion = `2.${number}.${number}`;
+export type BakingRLCompatibleApiVersion = `2.0.${number}` | `2.1.${number}`;
 export type ExtensionPointTarget = `${string}/${string}`;
 export type ResourceVisibility = "public" | "private";
 

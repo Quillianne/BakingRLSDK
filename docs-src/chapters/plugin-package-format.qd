@@ -46,8 +46,9 @@ Must be `bakingrl.plugin/4` for current packages.
 `bakingrlApi`
 
 Top-level contract version. New packages should declare exact `2.1.0` for the
-current V4 runtime contract. The helper CLI accepts compatible `2.x` manifests
-up to the current runtime API.
+current V4 runtime contract. The helper CLI accepts compatible manifests in the
+`>=2.0.0 <=2.1.x` runtime API window. `2.2.0` and newer mean the package
+requires a newer host.
 
 `id`
 
@@ -211,7 +212,10 @@ Contributor packages target an extension point with
 ```
 
 `visual`, `service`, and `resources` reference local declarations in the same
-manifest. The host resolves the graph, hides unusable contributions when a
+manifest. A self-target may reference a local extension point without a
+top-level dependency. Any cross-package target must declare a top-level
+`dependencies` entry for the target package, even when that dependency is
+optional. The host resolves the graph, hides unusable contributions when a
 dependency is missing or disabled, and exposes the resolved graph through SDK
 runtime APIs.
 
@@ -244,7 +248,9 @@ Resources are package-relative files or directories:
 ```
 
 A resource must declare either `path` or `paths`, never both. `visibility`
-defaults to `private`. Public resources must declare `type`.
+defaults to `private`. Public resources must declare `type`. Private resources
+stay host-mediated; package code should read resources through SDK refs rather
+than assuming filesystem paths.
 
 ## Bus And Registry Namespaces
 

@@ -57,9 +57,10 @@ docs-site/                        Generated documentation output
 ## Compatibility
 
 This SDK targets `bakingrl.plugin/4` with `bakingrlApi: "2.1.0"` for new
-packages. The helper CLI accepts compatible `2.x` package manifests up to the
-current runtime API so existing `2.0.0` packages can still be inspected and
-validated during the refactor.
+packages. The helper CLI accepts compatible package manifests in the
+`>=2.0.0 <=2.1.x` runtime API window so existing `2.0.0` packages can still be
+inspected and validated during the refactor. A package declaring `2.2.0` or
+newer is treated as requiring a newer host.
 
 Use [Plugin Package Format](plugin-package-format.qd) for the manifest
 contract, [Runtime Surfaces](runtime-surfaces.qd) for host APIs,

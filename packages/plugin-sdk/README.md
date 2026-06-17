@@ -49,7 +49,8 @@ export default defineWebview({
 
 This SDK targets BakingRL trusted plugin package schema `bakingrl.plugin/4`,
 SDK version `2.1.1`, and `bakingrlApi: "2.1.0"` for the current V4 runtime
-contract.
+contract. Compatible packages target `>=2.0.0 <=2.1.x`; `2.2.0` and newer are
+treated as requiring a newer host.
 
 See the repository `docs-src/` documentation for the full SDK API, manifest
 format, telemetry types, and security model.

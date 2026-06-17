@@ -70,7 +70,8 @@ the id of a `contributes.visuals` entry whose `kind` is `config`.
 Use `contributes.extensionPoints` when a plugin is a platform for other
 plugins. Use `contributes.contributions` when a package contributes to another
 plugin's extension point. External contribution targets require a top-level
-`dependencies` entry.
+`dependencies` entry; self-targeted contributions use the local extension point
+without adding a self dependency.
 
 Use `contributes.resources` for package-local content such as images, presets,
 or JSON data. Public resources need a `type`; private resources remain owned by

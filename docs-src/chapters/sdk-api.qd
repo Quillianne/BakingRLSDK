@@ -91,7 +91,10 @@ export const deactivate = extension.deactivate;
 
 Services are registered from `activate(context)`. The manifest only declares
 service names, methods, schemas, and optional sidecar links so the host can
-inspect packages before executing them.
+inspect packages before executing them. Cross-package calls use refs such as
+`com.example.package/state`; the host enforces a declared dependency on the
+target package at call time. The SDK does not require a new manifest field for
+that rule.
 
 ## Plugin Graph
 
@@ -111,6 +114,8 @@ const contributions = await context.extensions.contributions(
 `createExtensionTarget(packageId, extensionPointId)` formats a target string for
 manifest and runtime use. `context.extensions.contributions(...)` only returns
 contributions that the host considers usable for the current package graph.
+External contribution targets require a matching top-level dependency; self
+targets only need the local extension point.
 
 ## Visuals
 
@@ -210,6 +215,9 @@ const json = await context.resources.readJson("com.example.content_pack/logos");
 
 Use `createResourceRef(packageId, resourceId)` when building resource refs.
 The host decides whether a private resource is readable by the caller.
+`ResourceFilter` currently scopes by `packageId`; `type` and `visibility`
+metadata are host-resolved and must not be treated as a bypass around resource
+policy.
 
 ## Sidecars
 

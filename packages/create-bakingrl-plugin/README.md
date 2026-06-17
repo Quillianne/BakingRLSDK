@@ -35,7 +35,9 @@ and install V4 plugin packages during development.
 
 New packages declare `bakingrlApi` with the current BakingRL runtime API
 (`2.1.0`). The helper validates the current V4 contract and accepts compatible
-`2.x` package manifests up to the current runtime API.
+package manifests in the `>=2.0.0 <=2.1.x` runtime API window. Manifests that
+declare `2.2.0` or newer require a newer host and are rejected by this target
+validator.
 
 Current templates are `extension-plugin`, `overlay-plugin`, and
 `native-sidecar-plugin`. Package-level settings schema moved to

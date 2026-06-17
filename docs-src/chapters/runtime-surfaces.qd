@@ -73,7 +73,10 @@ const snapshot = await context.services.call("com.example.package/state", "snaps
 ```
 
 The manifest describes each service, but `activate(context)` owns the
-implementation through `context.services.register(...)`.
+implementation through `context.services.register(...)`. Cross-package service
+calls use a package-qualified service ref and are checked by the host at call
+time; callers must declare a top-level dependency on the target package. This
+rule does not add a manifest field to service declarations.
 
 ## Plugin Dependencies And Contributions
 
@@ -131,7 +134,10 @@ services, or resources:
 The host owns graph resolution, activation blocking, diagnostics, and removal
 of contributions when a package is disabled. Plugin code discovers the resolved
 graph through `context.plugins.list()`, `context.extensions.points()`, and
-`context.extensions.contributions()`.
+`context.extensions.contributions()`. A contribution targeting its own package
+may reference a local extension point directly. A contribution targeting
+another package must use `target: "<packageId>/<extensionPointId>"` and declare
+a matching top-level dependency on `<packageId>`.
 
 ## Bus Events
 
@@ -197,7 +203,9 @@ images, or static data:
 other plugins can discover them without BakingRL learning domain-specific
 meaning. The host validates paths and exposes approved resources through
 `context.resources.list()`, `context.resources.read()`,
-`context.resources.readText()`, and `context.resources.readJson()`.
+`context.resources.readText()`, and `context.resources.readJson()`. Resource
+listing is host-filtered; the current SDK filter is package-scoped, and any
+host-exposed `type` or `visibility` filtering must still preserve host policy.
 
 ## Registry And Storage
 

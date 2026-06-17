@@ -147,5 +147,6 @@ npm run docs:dev
 
 This SDK targets BakingRL plugin package schema `bakingrl.plugin/4`, SDK
 version `2.1.1`, and `bakingrlApi: "2.1.0"` for the current V4 runtime
-contract. The helper CLI accepts compatible `2.x` package manifests up to the
-current runtime API for local validation.
+contract. The helper CLI validates compatible package manifests in the
+`>=2.0.0 <=2.1.x` runtime API window. A manifest declaring `2.2.0` or newer
+requires a newer host and is rejected for this target.

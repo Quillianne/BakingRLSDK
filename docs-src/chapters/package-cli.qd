@@ -51,7 +51,9 @@ Validation checks:
 Current validation accepts `contributes.extensionPoints`,
 `contributes.contributions`, `contributes.resources`, and
 `contributes.webviews`. A contribution targeting another package must declare a
-matching top-level dependency.
+matching top-level dependency. Runtime API validation accepts manifests in the
+`>=2.0.0 <=2.1.x` window and rejects `2.2.0` or newer as requiring a newer
+host.
 
 ## Doctor
 

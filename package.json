@@ -18,7 +18,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspace @bakingrl/plugin-sdk",
-    "check": "npm run build --workspace @bakingrl/plugin-sdk",
+    "check": "npm run build --workspace @bakingrl/plugin-sdk && npm run test:cli",
+    "test:cli": "node --test packages/create-bakingrl-plugin/test/*.test.mjs",
     "create": "node packages/create-bakingrl-plugin/bin/create-bakingrl-plugin.mjs",
     "helper": "node packages/create-bakingrl-plugin/lib/bakingrl-plugin.mjs",
     "docs:build": "quarkdown c docs-src/main.qd -o docs-site --clean --subdoc-naming file-name",

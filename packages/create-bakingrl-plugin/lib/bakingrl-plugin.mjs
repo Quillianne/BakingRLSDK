@@ -152,13 +152,6 @@ function parseRuntimeApi(value) {
   };
 }
 
-function compareRuntimeApi(left, right) {
-  for (const key of ["major", "minor", "patch"]) {
-    if (left[key] !== right[key]) return left[key] - right[key];
-  }
-  return 0;
-}
-
 function validateSemverRange(value, label) {
   if (value === undefined) return;
   if (typeof value !== "string" || value.trim() === "") {
@@ -190,8 +183,8 @@ function validateRuntimeCompatibility(manifest) {
   if (!declared) {
     fail("manifest.bakingrlApi must be an exact semver version");
   }
-  if (declared.major !== current.major || compareRuntimeApi(declared, current) > 0) {
-    fail(`manifest.bakingrlApi must be compatible with "${runtimeApiVersion}"`);
+  if (declared.major !== current.major || declared.minor > current.minor) {
+    fail(`manifest.bakingrlApi must be compatible with host runtime API >=2.0.0 <=2.${current.minor}.x`);
   }
 }
 
