@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "bakingrl.plugin/4",
+  "bakingrlApi": "2.1.0",
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "runtime": {
+    "node": {
+      "entry": "dist/extension/index.js"
+    },
+    "sidecars": []
+  },
+  "contributes": {
+    "services": [
+      {
+        "id": "platform",
+        "runtime": "node",
+        "methods": ["snapshot", "contributions"]
+      }
+    ],
+    "visuals": [
+      {
+        "id": "platformPreview",
+        "kind": "overlay",
+        "entry": "dist/visuals/platform-preview.js",
+        "defaultSize": [640, 180]
+      }
+    ],
+    "webviews": [
+      {
+        "id": "home",
+        "entry": "dist/webviews/home.js",
+        "title": "__PLUGIN_NAME__",
+        "kind": "tool",
+        "defaultSize": [640, 420]
+      }
+    ],
+    "extensionPoints": [
+      {
+        "id": "items",
+        "version": "1.0.0",
+        "title": "__PLUGIN_NAME__ items",
+        "description": "Accepts compatible contributions from other packages.",
+        "schema": "schemas/platform-item.schema.json",
+        "service": "platform"
+      }
+    ],
+    "resources": [
+      {
+        "id": "starterPreset",
+        "path": "resources/starter-preset.json",
+        "type": "application/json",
+        "visibility": "public",
+        "metadata": {
+          "role": "starter-preset"
+        }
+      }
+    ],
+    "settings": {}
+  }
+}

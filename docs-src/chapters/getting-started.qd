@@ -32,6 +32,9 @@ Other templates:
 ```sh
 create-bakingrl-plugin my-overlay --template overlay-plugin
 create-bakingrl-plugin my-native --template native-sidecar-plugin
+create-bakingrl-plugin my-platform --template platform-plugin
+create-bakingrl-plugin my-contributor --template contributor-plugin
+create-bakingrl-plugin my-content --template content-pack-plugin
 ```
 
 ## Development Loop

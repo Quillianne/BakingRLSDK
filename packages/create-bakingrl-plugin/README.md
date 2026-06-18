@@ -21,6 +21,9 @@ bakingrl-plugin
 create-bakingrl-plugin my-package
 create-bakingrl-plugin overlay-package --template overlay-plugin
 create-bakingrl-plugin native-package --template native-sidecar-plugin
+create-bakingrl-plugin platform-package --template platform-plugin
+create-bakingrl-plugin contributor-package --template contributor-plugin
+create-bakingrl-plugin content-package --template content-pack-plugin
 cd my-package
 npm install
 npm run build
@@ -39,8 +42,9 @@ package manifests in the `>=2.0.0 <=2.1.x` runtime API window. Manifests that
 declare `2.2.0` or newer require a newer host and are rejected by this target
 validator.
 
-Current templates are `extension-plugin`, `overlay-plugin`, and
-`native-sidecar-plugin`. Package-level settings schema moved to
+Current templates are `extension-plugin`, `overlay-plugin`,
+`native-sidecar-plugin`, `platform-plugin`, `contributor-plugin`, and
+`content-pack-plugin`. Package-level settings schema moved to
 `contributes.settings.schema` and remains host-owned. Browser visuals,
 webviews, extension points, contributions, and resources are declared through
 `contributes`.

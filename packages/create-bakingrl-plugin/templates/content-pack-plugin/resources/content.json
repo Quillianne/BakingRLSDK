@@ -1,0 +1,7 @@
+{
+  "title": "__PLUGIN_NAME__ content",
+  "messages": [
+    "This package has no runtime.",
+    "Its resources are discovered through the host."
+  ]
+}

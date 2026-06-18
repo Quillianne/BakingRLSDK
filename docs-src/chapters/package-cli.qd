@@ -15,6 +15,9 @@
 create-bakingrl-plugin my-plugin
 create-bakingrl-plugin my-overlay --template overlay-plugin
 create-bakingrl-plugin my-native --template native-sidecar-plugin
+create-bakingrl-plugin my-platform --template platform-plugin
+create-bakingrl-plugin my-contributor --template contributor-plugin
+create-bakingrl-plugin my-content --template content-pack-plugin
 ```
 
 Available templates:
@@ -23,6 +26,12 @@ Available templates:
 - `overlay-plugin`: extension host entry plus an overlay contribution.
 - `native-sidecar-plugin`: extension host entry plus a Rust JSON-RPC stdio
   sidecar.
+- `platform-plugin`: extension host service, visual, webview, public resource,
+  and extension point for other packages.
+- `contributor-plugin`: dependency-backed contribution with a service, visual,
+  and public resource.
+- `content-pack-plugin`: resource-only package that contributes public JSON and
+  SVG content to another package.
 
 Generated packages declare `schemaVersion: "bakingrl.plugin/4"`, and
 `bakingrlApi: "2.1.0"`.

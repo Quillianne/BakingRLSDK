@@ -1,0 +1,19 @@
+{
+  "name": "__PLUGIN_SLUG__",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/check.mjs",
+    "check": "node scripts/check.mjs",
+    "validate": "node scripts/bakingrl-plugin.mjs validate",
+    "doctor": "node scripts/bakingrl-plugin.mjs doctor",
+    "validate:listing": "node scripts/bakingrl-plugin.mjs validate-listing",
+    "pack": "node scripts/bakingrl-plugin.mjs pack",
+    "release:metadata": "node scripts/bakingrl-plugin.mjs release-metadata",
+    "marketplace:entry": "node scripts/bakingrl-plugin.mjs marketplace-entry",
+    "keygen": "node scripts/bakingrl-plugin.mjs keygen",
+    "sign": "node scripts/bakingrl-plugin.mjs sign",
+    "inspect": "node scripts/bakingrl-plugin.mjs inspect",
+    "install:local": "node scripts/bakingrl-plugin.mjs install-local"
+  }
+}

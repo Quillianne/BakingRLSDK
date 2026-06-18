@@ -24,6 +24,21 @@ const templates = [
     id: "native-sidecar-plugin",
     label: "Native Sidecar Plugin Package",
     description: "Manifest v4 with a Rust JSON-RPC stdio sidecar."
+  },
+  {
+    id: "platform-plugin",
+    label: "Platform Plugin Package",
+    description: "Manifest v4 with an extension point, service, visual, and webview."
+  },
+  {
+    id: "contributor-plugin",
+    label: "Contributor Plugin Package",
+    description: "Manifest v4 with a dependency-backed contribution to another plugin."
+  },
+  {
+    id: "content-pack-plugin",
+    label: "Content Pack Plugin Package",
+    description: "Manifest v4 resource-only package with a content contribution."
   }
 ];
 

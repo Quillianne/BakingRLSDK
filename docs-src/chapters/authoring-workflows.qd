@@ -73,9 +73,19 @@ plugin's extension point. External contribution targets require a top-level
 `dependencies` entry; self-targeted contributions use the local extension point
 without adding a self dependency.
 
+Use `create-bakingrl-plugin my-platform --template platform-plugin` when the
+package should own the extension point, and
+`create-bakingrl-plugin my-contributor --template contributor-plugin` when the
+package should contribute to an existing platform.
+
 Use `contributes.resources` for package-local content such as images, presets,
 or JSON data. Public resources need a `type`; private resources remain owned by
 the declaring package unless the host allows another package to read them.
+
+For resource-only packages, use
+`create-bakingrl-plugin my-content --template content-pack-plugin`. The
+generated package has no runtime and keeps content outside the host and outside
+platform package source.
 
 ## Services
 

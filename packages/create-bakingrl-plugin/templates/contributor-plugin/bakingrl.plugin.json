@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "bakingrl.plugin/4",
+  "bakingrlApi": "2.1.0",
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "dependencies": [
+    {
+      "packageId": "com.example.platform",
+      "version": "^1.0.0"
+    }
+  ],
+  "runtime": {
+    "node": {
+      "entry": "dist/extension/index.js"
+    },
+    "sidecars": []
+  },
+  "contributes": {
+    "services": [
+      {
+        "id": "contributor",
+        "runtime": "node",
+        "methods": ["snapshot"]
+      }
+    ],
+    "visuals": [
+      {
+        "id": "contributedVisual",
+        "kind": "overlay",
+        "entry": "dist/visuals/contributed-visual.js",
+        "defaultSize": [360, 140]
+      }
+    ],
+    "resources": [
+      {
+        "id": "contributionData",
+        "path": "resources/contribution.json",
+        "type": "application/json",
+        "visibility": "public",
+        "metadata": {
+          "role": "contribution-data"
+        }
+      }
+    ],
+    "contributions": [
+      {
+        "id": "sample-contribution",
+        "target": "com.example.platform/items",
+        "kind": "visual",
+        "title": "__PLUGIN_NAME__ contribution",
+        "visual": "contributedVisual",
+        "service": "contributor",
+        "resources": ["contributionData"],
+        "metadata": {
+          "category": "starter"
+        }
+      }
+    ],
+    "settings": {}
+  }
+}

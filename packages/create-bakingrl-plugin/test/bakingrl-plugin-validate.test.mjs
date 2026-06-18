@@ -1,11 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const cli = new URL("../lib/bakingrl-plugin.mjs", import.meta.url);
+const createCli = new URL("../bin/create-bakingrl-plugin.mjs", import.meta.url);
 
 function withPackage(manifest, callback) {
   const dir = mkdtempSync(join(tmpdir(), "bakingrl-sdk-validate-"));
@@ -37,6 +38,37 @@ function validatePackageFailure(manifest) {
     } catch (error) {
       return `${error.stdout ?? ""}${error.stderr ?? ""}`;
     }
+  });
+}
+
+function withTempDir(callback) {
+  const dir = mkdtempSync(join(tmpdir(), "bakingrl-sdk-template-"));
+  try {
+    return callback(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function scaffoldPackage(root, name, template) {
+  execFileSync(process.execPath, [createCli.pathname, name, "--template", template], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  return join(root, name);
+}
+
+function writeGeneratedEntry(packageDir, relativePath) {
+  const path = join(packageDir, relativePath);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, "export default {};\n");
+}
+
+function validateGeneratedPackage(packageDir) {
+  execFileSync(process.execPath, [join(packageDir, "scripts", "bakingrl-plugin.mjs"), "validate", packageDir], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
   });
 }
 
@@ -95,3 +127,31 @@ test("validator accepts external contributions with a declared dependency", () =
     }
   }));
 });
+
+test("scaffolder creates valid platform contributor and content pack templates", () => {
+  withTempDir((root) => {
+    const platform = scaffoldPackage(root, "platform-template", "platform-plugin");
+    writeGeneratedEntry(platform, "dist/extension/index.js");
+    writeGeneratedEntry(platform, "dist/visuals/platform-preview.js");
+    writeGeneratedEntry(platform, "dist/webviews/home.js");
+    validateGeneratedPackage(platform);
+    assert.equal(readJson(join(platform, "bakingrl.plugin.json")).contributes.extensionPoints[0].service, "platform");
+
+    const contributor = scaffoldPackage(root, "contributor-template", "contributor-plugin");
+    writeGeneratedEntry(contributor, "dist/extension/index.js");
+    writeGeneratedEntry(contributor, "dist/visuals/contributed-visual.js");
+    validateGeneratedPackage(contributor);
+    assert.equal(readJson(join(contributor, "bakingrl.plugin.json")).dependencies[0].packageId, "com.example.platform");
+
+    const content = scaffoldPackage(root, "content-template", "content-pack-plugin");
+    validateGeneratedPackage(content);
+    const contentManifest = readJson(join(content, "bakingrl.plugin.json"));
+    assert.equal(contentManifest.runtime, undefined);
+    assert.equal(contentManifest.contributes.resources.length, 2);
+    assert.ok(existsSync(join(content, "resources", "badges", "blue.svg")));
+  });
+});
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, "utf8"));
+}

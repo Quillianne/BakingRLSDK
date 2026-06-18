@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "bakingrl.plugin/4",
+  "bakingrlApi": "2.1.0",
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "dependencies": [
+    {
+      "packageId": "com.example.contributor",
+      "version": "^1.0.0"
+    }
+  ],
+  "contributes": {
+    "resources": [
+      {
+        "id": "contentData",
+        "path": "resources/content.json",
+        "type": "application/json",
+        "visibility": "public",
+        "metadata": {
+          "role": "content-data"
+        }
+      },
+      {
+        "id": "badgeSvgs",
+        "paths": [
+          "resources/badges/blue.svg",
+          "resources/badges/orange.svg"
+        ],
+        "type": "image/svg+xml",
+        "visibility": "public",
+        "metadata": {
+          "role": "team-badges"
+        }
+      }
+    ],
+    "contributions": [
+      {
+        "id": "sample-content",
+        "target": "com.example.contributor/content",
+        "kind": "content",
+        "title": "__PLUGIN_NAME__ content",
+        "resources": ["contentData", "badgeSvgs"],
+        "metadata": {
+          "category": "starter"
+        }
+      }
+    ]
+  }
+}
