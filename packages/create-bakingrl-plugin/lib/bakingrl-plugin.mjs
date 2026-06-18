@@ -1034,7 +1034,11 @@ function main() {
     const keyIndex = args.indexOf("--sign");
     const keyPath = keyIndex === -1 ? null : args[keyIndex + 1];
     if (keyIndex !== -1 && !keyPath) fail("Usage: node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]");
-    const explicitDir = args.find((arg, index) => index !== keyIndex && index !== keyIndex + 1 && !arg.startsWith("-"));
+    const explicitDir = args.find(
+      (arg, index) =>
+        !arg.startsWith("-") &&
+        (keyIndex === -1 || (index !== keyIndex && index !== keyIndex + 1))
+    );
     return pack(resolve(process.cwd(), explicitDir ?? "."), keyPath);
   }
   if (command === "inspect") return inspect(packageDir);

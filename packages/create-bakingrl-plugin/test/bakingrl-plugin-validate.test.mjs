@@ -259,6 +259,25 @@ test("validator rejects sidecar health check timeouts below the host minimum", (
   assert.match(output, /manifest\.runtime\.sidecars\[0\]\.healthCheck\.timeoutMs must be a number >= 100/);
 });
 
+test("pack accepts an explicit package directory without signing", () => {
+  withPackage(baseManifest({
+    runtime: {
+      node: {
+        entry: "dist/extension/index.js"
+      }
+    }
+  }), (dir) => {
+    writeGeneratedEntry(dir, "dist/extension/index.js");
+    execFileSync(process.execPath, [cli.pathname, "pack", dir], {
+      cwd: tmpdir(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    assert.ok(existsSync(join(dir, "manifest.hashes.json")));
+    assert.ok(existsSync(join(dir, "dist-bundles", "com.example.package-1.0.0.brlp")));
+  });
+});
+
 test("scaffolder creates valid platform contributor and content pack templates", () => {
   withTempDir((root) => {
     const platform = scaffoldPackage(root, "platform-template", "platform-plugin");
