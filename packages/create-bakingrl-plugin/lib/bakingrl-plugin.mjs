@@ -38,6 +38,8 @@ const allowedWebviewKinds = new Set(["tool", "settings", "panel"]);
 const sidecarRuntimePattern = /^sidecar:[a-zA-Z0-9._-]+$/;
 const sidecarActivationModes = new Set(["manual", "onEnable", "onStartup"]);
 const sidecarProtocol = "jsonrpc-stdio";
+const sidecarHealthCheckMinIntervalMs = 500;
+const sidecarHealthCheckMinTimeoutMs = 100;
 const supportedArtifactPlatforms = new Set(["any", "darwin-arm64", "darwin-x64", "linux-x64", "windows-x64"]);
 
 function fail(message) {
@@ -300,6 +302,12 @@ function validatePositiveNumber(value, label) {
   }
 }
 
+function validateNumberAtLeast(value, label, minimum) {
+  if (!Number.isFinite(value) || value < minimum) {
+    fail(`${label} must be a number >= ${minimum}`);
+  }
+}
+
 function validateDefaultSize(value, label) {
   if (value === undefined) return;
   if (!Array.isArray(value) || value.length !== 2 || value.some((entry) => !Number.isFinite(entry) || entry <= 0)) {
@@ -312,8 +320,12 @@ function validateSidecarHealthCheck(value, label) {
   assertPlainObject(value, label);
   assertAllowedKeys(value, label, new Set(["method", "intervalMs", "timeoutMs"]));
   validateExportName(`${label}.method`, value.method);
-  if (value.intervalMs !== undefined) validatePositiveNumber(value.intervalMs, `${label}.intervalMs`);
-  if (value.timeoutMs !== undefined) validatePositiveNumber(value.timeoutMs, `${label}.timeoutMs`);
+  if (value.intervalMs !== undefined) {
+    validateNumberAtLeast(value.intervalMs, `${label}.intervalMs`, sidecarHealthCheckMinIntervalMs);
+  }
+  if (value.timeoutMs !== undefined) {
+    validateNumberAtLeast(value.timeoutMs, `${label}.timeoutMs`, sidecarHealthCheckMinTimeoutMs);
+  }
 }
 
 function validateRuntimeSidecar(packageDir, sidecar, index) {

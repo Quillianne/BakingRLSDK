@@ -299,6 +299,8 @@ Sidecars are declared in an array:
 
 `bin` is package-relative. `protocol` is currently `jsonrpc-stdio`.
 Activation can be `manual`, `onEnable`, or `onStartup`.
+When `healthCheck` is declared, `intervalMs` must be at least `500` and
+`timeoutMs` must be at least `100`.
 
 ## Settings And Secrets
 

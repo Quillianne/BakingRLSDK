@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 
 const cli = new URL("../lib/bakingrl-plugin.mjs", import.meta.url);
 const createCli = new URL("../bin/create-bakingrl-plugin.mjs", import.meta.url);
+const sidecarBin = "sidecars/native-helper/bin";
 
 function withPackage(manifest, callback) {
   const dir = mkdtempSync(join(tmpdir(), "bakingrl-sdk-validate-"));
@@ -18,8 +19,9 @@ function withPackage(manifest, callback) {
   }
 }
 
-function validatePackage(manifest) {
+function validatePackage(manifest, setupPackage) {
   return withPackage(manifest, (dir) => {
+    setupPackage?.(dir);
     execFileSync(process.execPath, [cli.pathname, "validate", dir], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
@@ -27,8 +29,9 @@ function validatePackage(manifest) {
   });
 }
 
-function validatePackageFailure(manifest) {
+function validatePackageFailure(manifest, setupPackage) {
   return withPackage(manifest, (dir) => {
+    setupPackage?.(dir);
     try {
       execFileSync(process.execPath, [cli.pathname, "validate", dir], {
         encoding: "utf8",
@@ -83,6 +86,25 @@ function baseManifest(overrides = {}) {
   };
 }
 
+function sidecarManifest(healthCheck) {
+  return baseManifest({
+    runtime: {
+      sidecars: [
+        {
+          id: "native-helper",
+          bin: sidecarBin,
+          protocol: "jsonrpc-stdio",
+          healthCheck
+        }
+      ]
+    }
+  });
+}
+
+function writeSidecarBin(packageDir) {
+  writeGeneratedEntry(packageDir, sidecarBin);
+}
+
 test("validator accepts runtime API 2.0.x and 2.1.x manifests", () => {
   validatePackage(baseManifest({ bakingrlApi: "2.0.0" }));
   validatePackage(baseManifest({ bakingrlApi: "2.1.99" }));
@@ -126,6 +148,32 @@ test("validator accepts external contributions with a declared dependency", () =
       ]
     }
   }));
+});
+
+test("validator accepts sidecar health check host minimum bounds", () => {
+  validatePackage(sidecarManifest({
+    method: "ping",
+    intervalMs: 500,
+    timeoutMs: 100
+  }), writeSidecarBin);
+});
+
+test("validator rejects sidecar health check intervals below the host minimum", () => {
+  const output = validatePackageFailure(sidecarManifest({
+    method: "ping",
+    intervalMs: 499,
+    timeoutMs: 100
+  }), writeSidecarBin);
+  assert.match(output, /manifest\.runtime\.sidecars\[0\]\.healthCheck\.intervalMs must be a number >= 500/);
+});
+
+test("validator rejects sidecar health check timeouts below the host minimum", () => {
+  const output = validatePackageFailure(sidecarManifest({
+    method: "ping",
+    intervalMs: 500,
+    timeoutMs: 99
+  }), writeSidecarBin);
+  assert.match(output, /manifest\.runtime\.sidecars\[0\]\.healthCheck\.timeoutMs must be a number >= 100/);
 });
 
 test("scaffolder creates valid platform contributor and content pack templates", () => {

@@ -286,6 +286,9 @@ Rust and native helper code must run as a sidecar process declared in
 }
 ```
 
+When `healthCheck` is declared, `intervalMs` must be at least `500` and
+`timeoutMs` must be at least `100`.
+
 The extension host controls sidecars:
 
 ```ts
