@@ -30,7 +30,6 @@ and V4 contribution metadata.
 Other templates:
 
 ```sh
-create-bakingrl-plugin my-overlay --template overlay-plugin
 create-bakingrl-plugin my-native --template native-sidecar-plugin
 create-bakingrl-plugin my-platform --template platform-plugin
 create-bakingrl-plugin my-contributor --template contributor-plugin
@@ -62,8 +61,9 @@ Set `BAKINGRL_PACKAGES_DIR` to override the target during development.
 1. Start BakingRL from the host repository.
 2. Open the Packages or Developer area.
 3. Enable the package.
-4. Open contributed visuals or host-owned settings.
-5. Add contributed visuals to an overlay/editor layout.
+4. Open declared webviews or host-owned settings.
+5. Exercise services, resources, and extension point contributions from the
+   package or a dependent platform plugin.
 6. Use diagnostics, logs, and runtime restart controls when testing crashes or
    activation behavior.
 

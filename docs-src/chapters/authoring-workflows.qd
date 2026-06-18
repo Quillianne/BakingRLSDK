@@ -4,8 +4,8 @@
 .doclang {en}
 
 Current BakingRL plugin authoring uses one model: trusted v4 packages with a
-JavaScript extension host, browser visuals, host-owned settings metadata, and
-first-class native sidecars. Runtime API `2.1.0` also adds dependencies,
+JavaScript extension host, host-opened webviews, host-owned settings metadata,
+and first-class native sidecars. Runtime API `2.2.0` also keeps dependencies,
 extension points, contributions, resources, and declared webviews for plugin
 ecosystem chains.
 
@@ -41,29 +41,15 @@ Use the extension entry for package logic:
 The manifest `contributes.services` array is descriptive. The implementation is
 registered from `activate(context)`.
 
-## Visuals
-
-Use visuals for editor and overlay rectangles. A visual should fill its assigned
-box, react to `update(context)`, and use `context.item.width`,
-`context.item.height`, `context.item.opacity`, and `context.settings` instead
-of fixed viewport assumptions.
-
-Visuals can subscribe to host events and call services through `VisualContext`.
-They should remain browser-compatible and avoid importing extension-host-only
-modules.
-
 ## Browser Surfaces
 
-Use `contributes.visuals` for reusable browser entries mounted by host-owned
-surfaces such as overlays and pages. Keep the browser entry small and
-communicate through the webview bridge.
-
 Use `contributes.webviews` for package tools, settings panels, and other
-host-opened browser windows that are not reusable overlay visuals.
+host-opened browser windows. Keep browser entries small and communicate through
+mediated context APIs or the webview bridge.
 
 Host-owned settings should use JSON Schema through `contributes.settings`.
 Custom configuration UI can be exposed by setting `contributes.settings.ui` to
-the id of a `contributes.visuals` entry whose `kind` is `config`.
+the id of a `contributes.webviews` entry whose `kind` is `settings`.
 
 ## Extension Points And Resources
 
@@ -104,7 +90,7 @@ context.services.register("matchStats", {
 ```
 
 Declare service names and method names in `contributes.services` so the host,
-developer tools, and marketplace can inspect the package before activation.
+developer tools, and diagnostics can inspect the package before activation.
 
 ## Sidecars
 

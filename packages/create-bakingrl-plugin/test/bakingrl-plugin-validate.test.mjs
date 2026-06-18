@@ -78,7 +78,7 @@ function validateGeneratedPackage(packageDir) {
 function baseManifest(overrides = {}) {
   return {
     schemaVersion: "bakingrl.plugin/4",
-    bakingrlApi: "2.1.0",
+    bakingrlApi: "2.2.0",
     id: "com.example.package",
     name: "Example Package",
     version: "1.0.0",
@@ -105,14 +105,16 @@ function writeSidecarBin(packageDir) {
   writeGeneratedEntry(packageDir, sidecarBin);
 }
 
-test("validator accepts runtime API 2.0.x and 2.1.x manifests", () => {
-  validatePackage(baseManifest({ bakingrlApi: "2.0.0" }));
-  validatePackage(baseManifest({ bakingrlApi: "2.1.99" }));
+test("validator accepts runtime API 2.2.x manifests", () => {
+  validatePackage(baseManifest({ bakingrlApi: "2.2.0" }));
+  validatePackage(baseManifest({ bakingrlApi: "2.2.99" }));
 });
 
-test("validator rejects runtime API 2.2.0 and newer as requiring a newer host", () => {
-  const output = validatePackageFailure(baseManifest({ bakingrlApi: "2.2.0" }));
-  assert.match(output, /compatible with host runtime API >=2\.0\.0 <=2\.1\.x/);
+test("validator rejects runtime APIs outside 2.2.x", () => {
+  const legacyOutput = validatePackageFailure(baseManifest({ bakingrlApi: "2.1.99" }));
+  assert.match(legacyOutput, /target host runtime API 2\.2\.x/);
+  const output = validatePackageFailure(baseManifest({ bakingrlApi: "2.3.0" }));
+  assert.match(output, /target host runtime API 2\.2\.x/);
 });
 
 test("validator rejects external contributions without a declared dependency", () => {
@@ -122,7 +124,7 @@ test("validator rejects external contributions without a declared dependency", (
       contributions: [
         {
           id: "scorebug",
-          target: "com.example.host/visuals"
+          target: "com.example.host/items"
         }
       ]
     }
@@ -143,11 +145,92 @@ test("validator accepts external contributions with a declared dependency", () =
       contributions: [
         {
           id: "scorebug",
-          target: "com.example.host/visuals"
+          target: "com.example.host/items"
         }
       ]
     }
   }));
+});
+
+test("validator rejects removed host-owned visual surfaces", () => {
+  const output = validatePackageFailure(baseManifest({
+    contributes: {
+      visuals: []
+    }
+  }));
+  assert.match(output, /contributes\.visuals is not supported in runtime API 2\.2/);
+});
+
+test("validator rejects contribution visual references", () => {
+  const output = validatePackageFailure(baseManifest({
+    id: "com.example.contributor",
+    dependencies: [
+      {
+        packageId: "com.example.host",
+        version: "^1.0.0"
+      }
+    ],
+    contributes: {
+      contributions: [
+        {
+          id: "scorebug",
+          target: "com.example.host/items",
+          visual: "scorebug"
+        }
+      ]
+    }
+  }));
+  assert.match(output, /contributions\[0\]\.visual is not supported in runtime API 2\.2/);
+});
+
+test("validator accepts settings UI backed by a settings webview", () => {
+  validatePackage(baseManifest({
+    contributes: {
+      settings: {
+        ui: "settings"
+      },
+      webviews: [
+        {
+          id: "settings",
+          entry: "dist/webviews/settings.js",
+          kind: "settings"
+        }
+      ]
+    }
+  }), (dir) => {
+    writeGeneratedEntry(dir, "dist/webviews/settings.js");
+  });
+});
+
+test("validator rejects settings UI without a settings webview", () => {
+  const output = validatePackageFailure(baseManifest({
+    contributes: {
+      settings: {
+        ui: "settings"
+      },
+      webviews: [
+        {
+          id: "settings",
+          entry: "dist/webviews/settings.js",
+          kind: "tool"
+        }
+      ]
+    }
+  }), (dir) => {
+    writeGeneratedEntry(dir, "dist/webviews/settings.js");
+  });
+  assert.match(output, /settings\.ui must reference a webview with kind settings/);
+});
+
+test("validator rejects external surfaces", () => {
+  const output = validatePackageFailure(baseManifest({
+    externalSurfaces: {
+      obs: {
+        runtime: "node"
+      }
+    }
+  }));
+  assert.match(output, /manifest\.externalSurfaces is not supported/);
 });
 
 test("validator accepts sidecar health check host minimum bounds", () => {
@@ -180,14 +263,12 @@ test("scaffolder creates valid platform contributor and content pack templates",
   withTempDir((root) => {
     const platform = scaffoldPackage(root, "platform-template", "platform-plugin");
     writeGeneratedEntry(platform, "dist/extension/index.js");
-    writeGeneratedEntry(platform, "dist/visuals/platform-preview.js");
     writeGeneratedEntry(platform, "dist/webviews/home.js");
     validateGeneratedPackage(platform);
     assert.equal(readJson(join(platform, "bakingrl.plugin.json")).contributes.extensionPoints[0].service, "platform");
 
     const contributor = scaffoldPackage(root, "contributor-template", "contributor-plugin");
     writeGeneratedEntry(contributor, "dist/extension/index.js");
-    writeGeneratedEntry(contributor, "dist/visuals/contributed-visual.js");
     validateGeneratedPackage(contributor);
     assert.equal(readJson(join(contributor, "bakingrl.plugin.json")).dependencies[0].packageId, "com.example.platform");
 

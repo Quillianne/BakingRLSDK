@@ -7,7 +7,6 @@ export default defineConfig({
       preserveEntrySignatures: "strict",
       input: {
         "extension/index": "src/extension/index.ts",
-        "visuals/platform-preview": "src/visuals/platform-preview/index.ts",
         "webviews/home": "src/webviews/home/index.ts"
       },
       output: {

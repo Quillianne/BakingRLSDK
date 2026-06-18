@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
-const runtimeApiVersion = "2.1.0";
+const runtimeApiVersion = "2.2.0";
 const allowedTopLevelFields = new Set([
   "schemaVersion",
   "id",
@@ -17,30 +17,43 @@ const allowedTopLevelFields = new Set([
   "bakingrlApi",
   "dependencies",
   "runtime",
-  "contributes",
-  "externalSurfaces"
+  "contributes"
 ]);
-const rejectedTopLevelFields = ["schema", "compatibility", "capabilities", "kind", "activation", "settings", "diagnostics", "safeMode"];
-const legacyContributeGroups = ["views", "pages", "overlays", "configuration", "assets", "schemas"];
+const rejectedTopLevelFields = [
+  "schema",
+  "compatibility",
+  "capabilities",
+  "kind",
+  "activation",
+  "settings",
+  "diagnostics",
+  "safeMode",
+  "externalSurfaces"
+];
+const removedContributeGroups = new Map([
+  ["visuals", "manifest.contributes.visuals is not supported in runtime API 2.2; use webviews for host-opened UI and resources/services/metadata for platform contributions"],
+  ["views", "manifest.contributes.views is not supported; use contributes.webviews"],
+  ["pages", "manifest.contributes.pages is not supported; use contributes.webviews"],
+  ["overlays", "manifest.contributes.overlays is not supported; expose overlay behavior through a platform plugin contract"],
+  ["configuration", "manifest.contributes.configuration is not supported; use contributes.settings"],
+  ["assets", "manifest.contributes.assets is not supported; use contributes.resources"],
+  ["schemas", "manifest.contributes.schemas is not supported; reference schemas from settings, services, extension points, or contributions"]
+]);
 const supportedContributionSections = new Set([
   "commands",
   "services",
-  "visuals",
   "settings",
   "extensionPoints",
   "contributions",
   "resources",
   "webviews"
 ]);
-const supportedExternalSurfaces = new Set(["obs", "web", "remote"]);
-const allowedVisualKinds = new Set(["overlay", "config", "external"]);
 const allowedWebviewKinds = new Set(["tool", "settings", "panel"]);
 const sidecarRuntimePattern = /^sidecar:[a-zA-Z0-9._-]+$/;
 const sidecarActivationModes = new Set(["manual", "onEnable", "onStartup"]);
 const sidecarProtocol = "jsonrpc-stdio";
 const sidecarHealthCheckMinIntervalMs = 500;
 const sidecarHealthCheckMinTimeoutMs = 100;
-const supportedArtifactPlatforms = new Set(["any", "darwin-arm64", "darwin-x64", "linux-x64", "windows-x64"]);
 
 function fail(message) {
   console.error(message);
@@ -53,10 +66,6 @@ function readJson(path) {
   } catch (error) {
     fail(`Unable to read valid JSON at ${path}: ${error.message}`);
   }
-}
-
-function writeJson(path, value) {
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function appDataDir() {
@@ -185,8 +194,8 @@ function validateRuntimeCompatibility(manifest) {
   if (!declared) {
     fail("manifest.bakingrlApi must be an exact semver version");
   }
-  if (declared.major !== current.major || declared.minor > current.minor) {
-    fail(`manifest.bakingrlApi must be compatible with host runtime API >=2.0.0 <=2.${current.minor}.x`);
+  if (declared.major !== current.major || declared.minor !== current.minor) {
+    fail(`manifest.bakingrlApi must target host runtime API ${current.major}.${current.minor}.x`);
   }
 }
 
@@ -403,35 +412,7 @@ function validateContributionServices(packageDir, services = [], sidecarIds) {
   return ids;
 }
 
-function validateContributionVisuals(packageDir, visuals = []) {
-  if (!Array.isArray(visuals)) {
-    fail("manifest.contributes.visuals must be an array");
-  }
-  const ids = new Set();
-  for (const [index, visual] of Object.entries(visuals)) {
-    const label = `manifest.contributes.visuals[${index}]`;
-    assertPlainObject(visual, label);
-    assertAllowedKeys(visual, label, new Set(["id", "kind", "entry", "defaultSize", "instanceSettings", "remoteCompatible"]));
-    validateExportName(`${label}.id`, visual.id);
-    if (ids.has(visual.id)) fail(`${label}.id is duplicated`);
-    ids.add(visual.id);
-    if (visual.entry === undefined) fail(`${label}.entry is required`);
-    validateBuiltEntry(packageDir, "contributes.visuals", index, visual);
-    if (visual.kind !== undefined) {
-      if (!allowedVisualKinds.has(visual.kind)) {
-        fail(`${label}.kind must be overlay, config, or external`);
-      }
-    }
-    validateDefaultSize(visual.defaultSize, `${label}.defaultSize`);
-    validateOptionalPathField(packageDir, label, visual, "instanceSettings", "Visual instance settings schema");
-    if (visual.remoteCompatible !== undefined && typeof visual.remoteCompatible !== "boolean") {
-      fail(`${label}.remoteCompatible must be a boolean`);
-    }
-  }
-  return ids;
-}
-
-function validateContributesSettings(packageDir, contributes) {
+function validateContributesSettings(packageDir, contributes, webviewsById) {
   const settings = contributes.settings;
   if (settings === undefined) return;
   assertPlainObject(settings, "manifest.contributes.settings");
@@ -446,12 +427,12 @@ function validateContributesSettings(packageDir, contributes) {
   }
   if (Object.prototype.hasOwnProperty.call(settings, "ui")) {
     if (typeof settings.ui !== "string") {
-      fail("manifest.contributes.settings.ui must be a visual id");
+      fail("manifest.contributes.settings.ui must be a webview id");
     }
     validateExportName("manifest.contributes.settings.ui", settings.ui);
-    const visual = (contributes.visuals ?? []).find((entry) => entry.id === settings.ui && entry.kind === "config");
-    if (!visual) {
-      fail(`manifest.contributes.settings.ui must reference a visual with kind config (${settings.ui})`);
+    const webview = webviewsById.get(settings.ui);
+    if (!webview || webview.kind !== "settings") {
+      fail(`manifest.contributes.settings.ui must reference a webview with kind settings (${settings.ui})`);
     }
   }
 }
@@ -566,14 +547,14 @@ function validateContributionWebviews(packageDir, webviews = []) {
   if (!Array.isArray(webviews)) {
     fail("manifest.contributes.webviews must be an array");
   }
-  const ids = new Set();
+  const webviewsById = new Map();
   for (const [index, webview] of Object.entries(webviews)) {
     const label = `manifest.contributes.webviews[${index}]`;
     assertPlainObject(webview, label);
     assertAllowedKeys(webview, label, new Set(["id", "entry", "title", "kind", "defaultSize"]));
     validateExportName(`${label}.id`, webview.id);
-    if (ids.has(webview.id)) fail(`${label}.id is duplicated`);
-    ids.add(webview.id);
+    if (webviewsById.has(webview.id)) fail(`${label}.id is duplicated`);
+    webviewsById.set(webview.id, webview);
     if (webview.entry === undefined) fail(`${label}.entry is required`);
     validateBuiltEntry(packageDir, "contributes.webviews", index, webview);
     validateOptionalString(webview.title, `${label}.title`);
@@ -582,10 +563,10 @@ function validateContributionWebviews(packageDir, webviews = []) {
     }
     validateDefaultSize(webview.defaultSize, `${label}.defaultSize`);
   }
-  return ids;
+  return webviewsById;
 }
 
-function validateContributionContributions(packageDir, manifest, contributions = [], dependencyIds, extensionPointIds, visualIds, serviceIds, resourceIds) {
+function validateContributionContributions(packageDir, manifest, contributions = [], dependencyIds, extensionPointIds, serviceIds, resourceIds) {
   if (!Array.isArray(contributions)) {
     fail("manifest.contributes.contributions must be an array");
   }
@@ -593,6 +574,9 @@ function validateContributionContributions(packageDir, manifest, contributions =
   for (const [index, contribution] of Object.entries(contributions)) {
     const label = `manifest.contributes.contributions[${index}]`;
     assertPlainObject(contribution, label);
+    if (Object.prototype.hasOwnProperty.call(contribution, "visual")) {
+      fail(`${label}.visual is not supported in runtime API 2.2; use metadata, resources, or service references`);
+    }
     assertAllowedKeys(contribution, label, new Set([
       "id",
       "target",
@@ -600,7 +584,6 @@ function validateContributionContributions(packageDir, manifest, contributions =
       "title",
       "description",
       "dataSchema",
-      "visual",
       "service",
       "resources",
       "metadata"
@@ -620,12 +603,6 @@ function validateContributionContributions(packageDir, manifest, contributions =
     validateOptionalString(contribution.title, `${label}.title`);
     validateOptionalString(contribution.description, `${label}.description`);
     validateOptionalPathField(packageDir, label, contribution, "dataSchema", "Contribution data schema");
-    if (contribution.visual !== undefined) {
-      validateExportName(`${label}.visual`, contribution.visual);
-      if (!visualIds.has(contribution.visual)) {
-        fail(`${label}.visual references unknown contributes.visuals id '${contribution.visual}'`);
-      }
-    }
     if (contribution.service !== undefined) {
       validateExportName(`${label}.service`, contribution.service);
       if (!serviceIds.has(contribution.service)) {
@@ -675,68 +652,30 @@ function validateContributesSection(manifest, packageDir, sidecarIds, dependency
     assertPlainObject(contributes, "manifest.contributes");
   }
   for (const key of Object.keys(contributes)) {
+    if (removedContributeGroups.has(key)) fail(removedContributeGroups.get(key));
     if (!supportedContributionSections.has(key)) fail(`manifest.contributes.${key} is not supported`);
-  }
-  for (const legacyGroup of legacyContributeGroups) {
-    if (Object.prototype.hasOwnProperty.call(contributes, legacyGroup)) {
-      fail(`manifest.contributes.${legacyGroup} is not supported`);
-    }
   }
   validateContributionCommands(packageDir, contributes.commands);
   const serviceIds = validateContributionServices(packageDir, contributes.services, sidecarIds);
-  const visualIds = validateContributionVisuals(packageDir, contributes.visuals);
   const extensionPointIds = validateContributionExtensionPoints(packageDir, contributes.extensionPoints, serviceIds);
   const resourceIds = validateContributionResources(packageDir, contributes.resources);
-  validateContributionWebviews(packageDir, contributes.webviews);
+  const webviewsById = validateContributionWebviews(packageDir, contributes.webviews);
   validateContributionContributions(
     packageDir,
     manifest,
     contributes.contributions,
     dependencyIds,
     extensionPointIds,
-    visualIds,
     serviceIds,
     resourceIds
   );
-  validateContributesSettings(packageDir, contributes);
-}
-
-function validateRuntimeRef(label, value, sidecarIds = null) {
-  if (typeof value !== "string" || value.trim() === "") {
-    fail(`${label} must be a non-empty string`);
-  }
-  if (value === "node") return;
-  if (sidecarRuntimePattern.test(value)) {
-    const sidecarId = value.slice("sidecar:".length);
-    if (sidecarIds && !sidecarIds.has(sidecarId)) {
-      fail(`${label} references unknown runtime.sidecars id '${sidecarId}'`);
-    }
-    return;
-  }
-  fail(`${label} must be "node" or "sidecar:<id>"`);
-}
-
-function validateExternalSurfaces(manifest, sidecarIds) {
-  if (manifest.externalSurfaces === undefined) return;
-  const externalSurfaces = assertPlainObject(manifest.externalSurfaces, "manifest.externalSurfaces");
-  for (const [surface, declaration] of Object.entries(externalSurfaces)) {
-    if (!supportedExternalSurfaces.has(surface)) {
-      fail(`manifest.externalSurfaces.${surface} is not supported`);
-    }
-    const label = `manifest.externalSurfaces.${surface}`;
-    assertAllowedKeys(declaration, label, new Set(["runtime"]));
-    if (!Object.prototype.hasOwnProperty.call(declaration, "runtime")) {
-      fail(`${label}.runtime is required`);
-    }
-    validateRuntimeRef(`${label}.runtime`, declaration.runtime, sidecarIds);
-  }
+  validateContributesSettings(packageDir, contributes, webviewsById);
 }
 
 function validatePackageV4(packageDir, manifest) {
   const dependencyIds = validateDependencies(manifest);
   const sidecarIds = validatePackageRuntime(packageDir, manifest);
   validateContributesSection(manifest, packageDir, sidecarIds, dependencyIds);
-  validateExternalSurfaces(manifest, sidecarIds);
 }
 
 function validateNoEmbeddedNodeRuntime(packageDir) {
@@ -758,226 +697,6 @@ function validatePackage(packageDir, { print = true } = {}) {
   validateNoEmbeddedNodeRuntime(packageDir);
   if (print) console.log(`Package validation passed: ${manifest.id}`);
   return manifest;
-}
-
-function parseOptions(args) {
-  const options = { positional: [] };
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (!arg.startsWith("--")) {
-      options.positional.push(arg);
-      continue;
-    }
-    const raw = arg.slice(2);
-    const equalsIndex = raw.indexOf("=");
-    const rawKey = equalsIndex === -1 ? raw : raw.slice(0, equalsIndex);
-    const inlineValue = equalsIndex === -1 ? undefined : raw.slice(equalsIndex + 1);
-    const key = rawKey.replaceAll("-", "_");
-    if (inlineValue !== undefined) {
-      options[key] = inlineValue;
-    } else if (args[index + 1] && !args[index + 1].startsWith("--")) {
-      options[key] = args[index + 1];
-      index += 1;
-    } else {
-      options[key] = true;
-    }
-  }
-  return options;
-}
-
-function requireOption(options, key, label) {
-  const value = options[key];
-  if (typeof value !== "string" || value.trim() === "") fail(`Missing ${label}.`);
-  return value.trim();
-}
-
-function artifactPlatform(options) {
-  const value = options.platform === undefined || options.platform === true ? "any" : String(options.platform).trim();
-  if (!supportedArtifactPlatforms.has(value)) {
-    fail(`--platform must be one of: ${Array.from(supportedArtifactPlatforms).join(", ")}.`);
-  }
-  return value;
-}
-
-function optionalUrl(value, label, repoParts = null) {
-  if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string") fail(`${label} must be a URL string.`);
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    fail(`${label} must be a valid URL.`);
-  }
-  if (parsed.protocol !== "https:") fail(`${label} must use HTTPS.`);
-  if (repoParts && !isGitHubAssetUrlForRepo(parsed, repoParts)) {
-    fail(`${label} must point to the declared GitHub repository or one of its release assets.`);
-  }
-  return value;
-}
-
-function githubRepoParts(repoUrl) {
-  let parsed;
-  try {
-    parsed = new URL(repoUrl);
-  } catch {
-    fail("marketplace/listing.json repo must be a valid HTTPS GitHub URL.");
-  }
-  if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") {
-    fail("marketplace/listing.json repo must use https://github.com/<owner>/<repo>.");
-  }
-  const [owner, repo, ...rest] = parsed.pathname.split("/").filter(Boolean);
-  if (!owner || !repo || rest.length > 0) {
-    fail("marketplace/listing.json repo must use https://github.com/<owner>/<repo>.");
-  }
-  return { owner, repo: repo.replace(/\.git$/, "") };
-}
-
-function isGitHubAssetUrlForRepo(parsed, repoParts) {
-  const path = parsed.pathname.split("/").filter(Boolean);
-  if (parsed.hostname === "github.com") {
-    const [owner, repo, segment, action] = path;
-    return owner === repoParts.owner
-      && repo?.replace(/\.git$/, "") === repoParts.repo
-      && ((segment === "releases" && action === "download") || segment === "raw");
-  }
-  if (parsed.hostname === "raw.githubusercontent.com") {
-    const [owner, repo] = path;
-    return owner === repoParts.owner && repo === repoParts.repo;
-  }
-  return false;
-}
-
-function validateString(value, label, { max = 1000 } = {}) {
-  if (typeof value !== "string" || value.trim() === "") fail(`${label} must be a non-empty string.`);
-  if (value.length > max) fail(`${label} is too long.`);
-  return value;
-}
-
-function validateListing(packageDir, { print = true } = {}) {
-  const manifest = readPackageManifest(packageDir);
-  const listingPath = join(packageDir, "marketplace", "listing.json");
-  if (!existsSync(listingPath)) fail(`Missing marketplace/listing.json in ${packageDir}`);
-  const listing = readJson(listingPath);
-  if (listing.schema !== "bakingrl.plugin-listing/1") {
-    fail("marketplace/listing.json schema must be bakingrl.plugin-listing/1");
-  }
-  if (listing.packageId !== manifest.id) {
-    fail(`marketplace/listing.json packageId must match manifest.id (${manifest.id}).`);
-  }
-  validateString(listing.displayName ?? manifest.name, "marketplace/listing.json displayName", { max: 120 });
-  validateString(listing.shortDescription, "marketplace/listing.json shortDescription", { max: 180 });
-  validateString(listing.longDescription, "marketplace/listing.json longDescription", { max: 8000 });
-  if (!Array.isArray(listing.tags) || listing.tags.some((tag) => typeof tag !== "string" || tag.trim() === "")) {
-    fail("marketplace/listing.json tags must be an array of non-empty strings.");
-  }
-  const repoParts = githubRepoParts(validateString(listing.repo, "marketplace/listing.json repo", { max: 240 }));
-  optionalUrl(listing.iconUrl, "marketplace/listing.json iconUrl", repoParts);
-  optionalUrl(listing.bannerUrl, "marketplace/listing.json bannerUrl", repoParts);
-  if (!Array.isArray(listing.screenshots)) fail("marketplace/listing.json screenshots must be an array.");
-  for (const [index, screenshot] of listing.screenshots.entries()) {
-    if (!screenshot || typeof screenshot !== "object" || Array.isArray(screenshot)) {
-      fail(`marketplace/listing.json screenshots[${index}] must be an object.`);
-    }
-    optionalUrl(screenshot.url, `marketplace/listing.json screenshots[${index}].url`, repoParts);
-    if (screenshot.alt !== undefined) validateString(screenshot.alt, `marketplace/listing.json screenshots[${index}].alt`, { max: 180 });
-    if (screenshot.caption !== undefined) validateString(screenshot.caption, `marketplace/listing.json screenshots[${index}].caption`, { max: 240 });
-  }
-  const links = listing.links ?? {};
-  if (!links || typeof links !== "object" || Array.isArray(links)) fail("marketplace/listing.json links must be an object.");
-  for (const [key, value] of Object.entries(links)) {
-    optionalUrl(value, `marketplace/listing.json links.${key}`);
-  }
-  if (print) console.log(`Marketplace listing validation passed: ${manifest.id}`);
-  return { manifest, listing, repoParts };
-}
-
-function findBundlePath(packageDir, manifest) {
-  const bundlePath = join(packageDir, "dist-bundles", `${manifest.id}-${manifest.version}.brlp`);
-  if (!existsSync(bundlePath)) fail(`Missing packed bundle: ${bundlePath}`);
-  return bundlePath;
-}
-
-function readSignaturePublicKey(packageDir) {
-  const signaturePath = join(packageDir, "signature.ed25519");
-  if (!existsSync(signaturePath)) fail("Missing signature.ed25519. Run pack --sign before generating marketplace metadata.");
-  const signature = readJson(signaturePath);
-  if (signature.algorithm !== "ed25519" || typeof signature.publicKey !== "string" || signature.publicKey.trim() === "") {
-    fail("signature.ed25519 must contain an Ed25519 publicKey.");
-  }
-  return signature.publicKey;
-}
-
-function writeOrPrintJson(value, outputPath) {
-  if (outputPath) {
-    mkdirSync(dirname(outputPath), { recursive: true });
-    writeJson(outputPath, value);
-  } else {
-    console.log(JSON.stringify(value, null, 2));
-  }
-}
-
-function releaseMetadata(packageDir, args) {
-  const options = parseOptions(args);
-  const manifest = validatePackage(packageDir, { print: false });
-  const { listing } = validateListing(packageDir, { print: false });
-  const bundlePath = options.bundle ? resolve(process.cwd(), options.bundle) : findBundlePath(packageDir, manifest);
-  if (!existsSync(bundlePath)) fail(`Bundle does not exist: ${bundlePath}`);
-  const bundleUrl = requireOption(options, "bundle_url", "--bundle-url");
-  const listingUrl = requireOption(options, "listing_url", "--listing-url");
-  const artifact = {
-    platform: artifactPlatform(options),
-    bundleUrl,
-    bundleSha256: sha256File(bundlePath),
-    signaturePublicKey: readSignaturePublicKey(packageDir)
-  };
-  const metadata = {
-    schema: "bakingrl.plugin-release/1",
-    packageId: manifest.id,
-    version: manifest.version,
-    repo: listing.repo,
-    listingUrl,
-    artifacts: [artifact],
-    runtimeApi: manifest.bakingrlApi ?? null,
-    generatedAt: new Date().toISOString()
-  };
-  writeOrPrintJson(metadata, options.output ? resolve(process.cwd(), options.output) : null);
-}
-
-function marketplaceEntry(packageDir, args) {
-  const options = parseOptions(args);
-  const developerId = requireOption(options, "developer", "--developer");
-  const manifest = validatePackage(packageDir, { print: false });
-  const { listing } = validateListing(packageDir, { print: false });
-  const bundlePath = options.bundle ? resolve(process.cwd(), options.bundle) : findBundlePath(packageDir, manifest);
-  if (!existsSync(bundlePath)) fail(`Bundle does not exist: ${bundlePath}`);
-  const bundleUrl = requireOption(options, "bundle_url", "--bundle-url");
-  const listingUrl = requireOption(options, "listing_url", "--listing-url");
-  const reviewedAt = typeof options.reviewed_at === "string" ? options.reviewed_at : new Date().toISOString();
-  const artifact = {
-    platform: artifactPlatform(options),
-    bundleUrl,
-    bundleSha256: sha256File(bundlePath),
-    signaturePublicKey: readSignaturePublicKey(packageDir)
-  };
-  const entry = {
-    schema: "bakingrl.marketplace-package/1",
-    id: manifest.id,
-    developerId,
-    repo: listing.repo,
-    listingUrl,
-    approvedVersions: [
-      {
-        version: manifest.version,
-        artifacts: [artifact],
-        runtimeApi: manifest.bakingrlApi ?? null,
-        review: {
-          status: "approved",
-          reviewedAt
-        }
-      }
-    ]
-  };
-  writeOrPrintJson(entry, options.output ? resolve(process.cwd(), options.output) : null);
 }
 
 function pathForZip(path) {
@@ -1225,9 +944,6 @@ function collectBuildEntries(manifest) {
   for (const sidecar of manifest.runtime?.sidecars ?? []) {
     addEntry("runtime.sidecars", sidecar.id, sidecar.bin);
   }
-  for (const visual of manifest.contributes?.visuals ?? []) {
-    addEntry("contributes.visuals", visual.id, visual.entry);
-  }
   for (const webview of manifest.contributes?.webviews ?? []) {
     addEntry("contributes.webviews", webview.id, webview.entry);
   }
@@ -1253,11 +969,9 @@ function doctor(packageDir) {
     buildEntries: collectBuildEntries(manifest),
     dependencies: manifest.dependencies ?? [],
     sidecars: (manifest.runtime?.sidecars ?? []).map((sidecar) => sidecar.id),
-    externalSurfaces: manifest.externalSurfaces ?? null,
     contributes: {
       commands: (manifest.contributes?.commands ?? []).map((command) => command.id),
       services: (manifest.contributes?.services ?? []).map((service) => service.id),
-      visuals: (manifest.contributes?.visuals ?? []).map((visual) => visual.id),
       extensionPoints: (manifest.contributes?.extensionPoints ?? []).map((extensionPoint) => extensionPoint.id),
       contributions: (manifest.contributes?.contributions ?? []).map((contribution) => contribution.id),
       resources: (manifest.contributes?.resources ?? []).map((resource) => resource.id),
@@ -1278,8 +992,7 @@ function inspect(packageDir) {
     bakingrlApi: manifestBakingrlApi ?? null,
     dependencies: manifest.dependencies ?? [],
     runtime: manifest.runtime,
-    contributes: manifest.contributes ?? {},
-    externalSurfaces: manifest.externalSurfaces ?? null
+    contributes: manifest.contributes ?? {}
   };
   console.log(JSON.stringify(summary, null, 2));
 }
@@ -1317,9 +1030,6 @@ function main() {
   const packageDir = resolve(process.cwd(), maybeDir && !maybeDir.startsWith("-") ? maybeDir : ".");
   if (command === "validate") return validatePackage(packageDir);
   if (command === "doctor") return doctor(packageDir);
-  if (command === "validate-listing") return validateListing(packageDir);
-  if (command === "release-metadata") return releaseMetadata(packageDir, args);
-  if (command === "marketplace-entry") return marketplaceEntry(packageDir, args);
   if (command === "pack") {
     const keyIndex = args.indexOf("--sign");
     const keyPath = keyIndex === -1 ? null : args[keyIndex + 1];
@@ -1333,7 +1043,7 @@ function main() {
     console.log(appDataDir());
     return;
   }
-  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|doctor|validate-listing|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]\n       node scripts/bakingrl-plugin.mjs release-metadata [package-dir] --bundle-url <url> --listing-url <url> [--bundle <path>] [--platform <platform>] [--output <path>]\n       node scripts/bakingrl-plugin.mjs marketplace-entry [package-dir] --developer <id> --bundle-url <url> --listing-url <url> [--bundle <path>] [--platform <platform>] [--reviewed-at <iso>] [--output <path>]");
+  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|doctor|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]");
 }
 
 main();

@@ -1,7 +1,7 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "2.1.1";
-export const RUNTIME_API_VERSION = "2.1.0";
+export const SDK_VERSION = "2.2.0";
+export const RUNTIME_API_VERSION = "2.2.0";
 
 export * from "./telemetry.js";
 
@@ -99,57 +99,14 @@ export type ConfigurationContext = {
   secrets: ConfigurationSecretsContext;
 };
 
-export type VisualContext = {
-  root: HTMLElement;
-  package: {
-    id: string;
-    name: string;
-    enabled: boolean;
-  };
-  exportName: string;
-  item: {
-    id: string;
-    package_id: string;
-    export_name: string;
-    name: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    z_index: number;
-    visible: boolean;
-    locked: boolean;
-    opacity: number;
-    settings: Record<string, unknown>;
-  };
-  settings: Record<string, unknown>;
-  mode: "runtime" | "editor";
-  editor?: VisualEditorContext;
-  setActive(active: boolean): void;
-  bus: VisualBus;
-  telemetryHub: TelemetryHub;
-  registry: ReadonlyRegistry;
-  state: ContextState;
-  services: ServiceCaller;
-  configuration?: ConfigurationContext;
-  assets: AssetResolver;
-  diagnostics: ExtensionDiagnostics;
-  telemetry: ExtensionTelemetry;
-  secrets: ExtensionSecretReader;
-};
-
-export type VisualEditorContext = {
-  emit<TEvent extends string>(eventName: TEvent, payload?: BakingRLEventData<TEvent>): void;
-};
-
-export type VisualBus = {
+export type RuntimeBus = {
   subscribe<TEvent extends string>(
     eventName: TEvent,
     callback: (event: BakingRLEvent<BakingRLEventData<TEvent>, TEvent>) => void
   ): CleanupFn;
 };
 
-export type BackendBus = VisualBus & {
+export type BackendBus = RuntimeBus & {
   emit<TEvent extends string>(eventName: TEvent, payload: BakingRLEventData<TEvent>): void;
 };
 
@@ -279,6 +236,7 @@ export type WebviewContext = {
   packageId: string;
   webviewId: string;
   settings: WebviewSettingsController;
+  configuration?: ConfigurationContext;
   telemetryHub: TelemetryHub;
   dimensions: {
     width: number;
@@ -344,11 +302,6 @@ export type ExtensionResourceController = {
   readJson<TValue = unknown>(ref: string, path?: string): Promise<TValue>;
 };
 
-export type ExtensionOverlayController = {
-  list<TOutput = unknown>(): Promise<TOutput>;
-  refresh(): Promise<unknown>;
-};
-
 export type ExtensionContext = {
   id: string;
   packageId: string;
@@ -375,9 +328,6 @@ export type ExtensionContext = {
   secrets: ExtensionSecretReader;
   commands: ExtensionCommandRegistry;
   services: ExtensionServiceRegistry;
-  views?: ExtensionViewRegistry;
-  pages?: ExtensionPageRegistry;
-  overlays: ExtensionOverlayController;
   webviews: ExtensionWebviewController;
   plugins: ExtensionPluginController;
   extensions: ExtensionContributionController;
@@ -409,25 +359,6 @@ export type ExtensionServiceRegistry = {
   register(id: string, methods: Record<string, ExtensionServiceMethod>): ExtensionSubscription;
   registerService(id: string, methods: Record<string, ExtensionServiceMethod>): ExtensionSubscription;
   call<TOutput = unknown>(service: string, method: string, input?: unknown): Promise<TOutput>;
-};
-
-export type ExtensionWebviewProviderContext = {
-  webview: WebviewEndpoint;
-  extension: ExtensionContext;
-};
-
-export type ExtensionViewProvider = (context: ExtensionWebviewProviderContext) => void | ExtensionSubscription | Promise<void | ExtensionSubscription>;
-
-export type ExtensionViewRegistry = {
-  registerView(id: string, provider: ExtensionViewProvider): ExtensionSubscription;
-};
-
-export type ExtensionPageRegistry = {
-  registerPage(id: string, provider: ExtensionViewProvider): ExtensionSubscription;
-};
-
-export type ExtensionOverlayRegistry = {
-  registerOverlay(id: string, provider: ExtensionViewProvider): ExtensionSubscription;
 };
 
 export type RuntimeSidecarProtocol = "jsonrpc-stdio";
@@ -467,7 +398,7 @@ export type RuntimeDeclaration = {
 };
 
 export type RuntimeRef = "node" | `sidecar:${string}`;
-export type BakingRLCompatibleApiVersion = `2.0.${number}` | `2.1.${number}`;
+export type BakingRLCompatibleApiVersion = `2.2.${number}`;
 export type ExtensionPointTarget = `${string}/${string}`;
 export type ResourceVisibility = "public" | "private";
 
@@ -489,15 +420,6 @@ export type ContributionService = {
   runtime?: RuntimeRef;
   methods?: string[];
   schema?: string;
-};
-
-export type ContributionVisual = {
-  id: string;
-  kind?: "overlay" | "config" | "external";
-  entry: string;
-  defaultSize?: [number, number];
-  instanceSettings?: string;
-  remoteCompatible?: boolean;
 };
 
 export type ContributionAsset = {
@@ -529,7 +451,6 @@ export type ContributionContribution = {
   title?: string;
   description?: string;
   dataSchema?: string;
-  visual?: string;
   service?: string;
   resources?: string[];
   metadata?: Record<string, unknown>;
@@ -553,7 +474,6 @@ export type ContributionWebview = {
 };
 
 export type PluginManifestV4Contributes = {
-  visuals?: ContributionVisual[];
   settings?: ContributionSettings;
   services?: ContributionService[];
   commands?: ContributionCommand[];
@@ -561,16 +481,6 @@ export type PluginManifestV4Contributes = {
   contributions?: ContributionContribution[];
   resources?: ContributionResource[];
   webviews?: ContributionWebview[];
-};
-
-export type PluginManifestV4ExternalSurfaces = {
-  obs?: PluginManifestV4ExternalSurface;
-  web?: PluginManifestV4ExternalSurface;
-  remote?: PluginManifestV4ExternalSurface;
-};
-
-export type PluginManifestV4ExternalSurface = {
-  runtime: RuntimeRef;
 };
 
 export type PluginManifestV4 = {
@@ -582,7 +492,6 @@ export type PluginManifestV4 = {
   dependencies?: PluginDependency[];
   runtime?: RuntimeDeclaration;
   contributes?: PluginManifestV4Contributes;
-  externalSurfaces?: PluginManifestV4ExternalSurfaces;
 };
 
 export type WebviewMessage<TType extends string = string, TPayload = unknown> = {
@@ -620,42 +529,14 @@ export type WebviewExport = {
   mount(context: WebviewContext): void | CleanupFn | Promise<void | CleanupFn>;
 };
 
-export type VisualExport = {
-  mount(context: VisualContext): void | CleanupFn | Promise<void | CleanupFn>;
-  update?(context: VisualContext): void | Promise<void>;
-  unmount?(): void | Promise<void>;
-  editor?: {
-    mount?(context: VisualContext): void | CleanupFn | Promise<void | CleanupFn>;
-    actions?(context: VisualContext): VisualEditorAction[] | Promise<VisualEditorAction[]>;
-  };
-};
-
-export type VisualEditorAction = {
-  id: string;
-  label: string;
-  disabled?: boolean;
-  run(context: VisualContext): void | Promise<void>;
-};
-
-export type ManifestVisualExport = {
-  entry: string;
-  defaultSize?: [number, number];
-  settings?: string;
-};
-
 export type PluginDefinition = {
   id: string;
   name: string;
   version: string;
-  visuals?: Record<string, () => Promise<unknown>>;
 };
 
 export function defineExtension<T extends ExtensionModule>(extension: T): T {
   return extension;
-}
-
-export function defineVisual<T extends VisualExport>(visual: T): T {
-  return visual;
 }
 
 export function defineWebview<T extends WebviewExport>(webview: T): T {
@@ -723,175 +604,6 @@ export function createCleanup() {
     },
     run() {
       while (callbacks.length) callbacks.pop()?.();
-    }
-  };
-}
-
-export function createMockVisualContext(
-  partial: Partial<VisualContext> = {}
-): VisualContext {
-  const listeners = new Set<(event: BakingRLEvent) => void>();
-  let latestEvent: BakingRLEvent | null = null;
-  return {
-    root: document.createElement("div"),
-    package: {
-      id: "com.example.mock",
-      name: "Mock Package",
-      enabled: true
-    },
-    exportName: "mock",
-    item: {
-      id: "item",
-      package_id: "com.example.mock",
-      export_name: "mock",
-      name: "Mock",
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 120,
-      z_index: 1,
-      visible: true,
-      locked: false,
-      opacity: 1,
-      settings: {}
-    },
-    settings: {},
-    mode: "editor",
-    editor: {
-      emit(eventName, payload) {
-        latestEvent = { Event: eventName, Data: payload } as BakingRLEvent;
-        for (const listener of listeners) listener(latestEvent);
-      }
-    },
-    setActive() {},
-    bus: {
-      subscribe(_eventName, callback) {
-        const listener = callback as (event: BakingRLEvent) => void;
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      }
-    },
-    telemetryHub: {
-      subscribe(_eventName, callback) {
-        const listener = callback as (event: BakingRLEvent) => void;
-        listeners.add(listener);
-        if (latestEvent) listener(latestEvent);
-        return () => listeners.delete(listener);
-      },
-      publish(eventName, payload) {
-        latestEvent = { Event: eventName, Data: payload } as BakingRLEvent;
-        for (const listener of listeners) listener(latestEvent);
-      },
-      snapshot<TEvent extends string = string>() {
-        return latestEvent as BakingRLEvent<BakingRLEventData<TEvent>, TEvent> | null;
-      },
-      getSnapshot<TEvent extends string = string>() {
-        return latestEvent as BakingRLEvent<BakingRLEventData<TEvent>, TEvent> | null;
-      }
-    },
-    registry: {
-      async get() {
-        return null;
-      }
-    },
-    services: {
-      async call() {
-        return null as never;
-      }
-    },
-    configuration: {
-      packageId: "com.example.mock",
-      settings: {
-        async get() {
-          return {};
-        },
-        async update(values) {
-          return { ...values };
-        },
-        async save(values) {
-          return { ...values };
-        },
-        async reset() {
-          return {};
-        },
-        subscribe() {
-          return () => {};
-        }
-      },
-      secrets: {
-        async configured() {
-          return false;
-        },
-        async set(key) {
-          return mockConfigurationState(key, true);
-        },
-        async clear(key) {
-          return mockConfigurationState(key, false);
-        }
-      }
-    },
-    assets: {
-      url(ref) {
-        return ref;
-      }
-    },
-    state: {
-      async get() {
-        return null;
-      },
-      async set() {}
-    },
-    telemetry: {
-      async event() {}
-    },
-    secrets: {
-      async get() {
-        return undefined;
-      },
-      async configured() {
-        return false;
-      }
-    },
-    diagnostics: consoleDiagnostics(),
-    ...partial
-  };
-}
-
-function mockConfigurationState(key: string, configured: boolean): ConfigurationState {
-  return {
-    packageId: "com.example.mock",
-    title: "Mock Settings",
-    hasCustomPage: true,
-    schema: null,
-    values: {},
-    secrets: key
-      ? [
-          {
-            key,
-            label: key,
-            required: false,
-            configured
-          }
-        ]
-      : [],
-    secretStoreAvailable: true,
-    secretStoreError: null
-  };
-}
-
-function consoleDiagnostics(): ExtensionDiagnostics {
-  return {
-    info(message, data) {
-      console.info(message, data);
-    },
-    log(message, data) {
-      console.log(message, data);
-    },
-    warn(message, data) {
-      console.warn(message, data);
-    },
-    error(message, data) {
-      console.error(message, data);
     }
   };
 }

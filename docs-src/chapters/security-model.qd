@@ -15,8 +15,7 @@ The Rust/Tauri host owns:
 - package installation and bundle extraction;
 - manifest parsing and runtime compatibility decisions;
 - package enable state and safe mode;
-- page, overlay, and window routing;
-- the OBS gateway that serves package-owned OBS browser surfaces;
+- webview opening and package window supervision;
 - event bus and registry access checks;
 - extension host and sidecar supervision;
 - plugin dependency, extension point, contribution, and resource graph
@@ -42,8 +41,8 @@ cross-package discovery at runtime.
 ## Safe Mode
 
 Safe mode starts BakingRL without executing plugin code. In safe mode the host
-does not start extension hosts, native sidecars, plugin services, plugin pages,
-plugin overlays, plugin webviews, or plugin visuals.
+does not start extension hosts, native sidecars, plugin services, or plugin
+webviews.
 
 Use safe mode when a package blocks startup, crashes repeatedly, or renders
 broken UI.

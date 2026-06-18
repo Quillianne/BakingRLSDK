@@ -43,7 +43,7 @@ plugin-defined events such as `plugin.com.example.package.state`.
 
 `context.telemetryHub.snapshot()` and `context.telemetryHub.getSnapshot()`
 return the latest host-owned telemetry frame known by BakingRL, or `null` when
-no Rocket League frame has been received yet. Extensions, visuals, and webviews
+no Rocket League frame has been received yet. Extensions and webviews
 share the same frame shape.
 
 ```ts

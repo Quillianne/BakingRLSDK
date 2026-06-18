@@ -4,18 +4,17 @@
 .doclang {en}
 
 This guide turns the V4 runtime model into practical authoring rules. The goal
-is to keep packages predictable in the host editor, safe at runtime, and easy
-to maintain as the runtime API evolves.
+is to keep packages predictable in the host, safe at runtime, and easy to
+maintain as the runtime API evolves.
 
 ## Choose The Right Surface
 
-Use a visual for DOM rendering, animation, and frontend composition. A visual
-can react to telemetry, settings, service results, and registry snapshots, but
-it should not be the only owner of shared derived state.
+Use a webview for host-opened browser UI such as tools, dashboards, settings
+panels, and package-owned control surfaces.
 
 Use a service for backend state. Services are the right place to aggregate
 telemetry, publish package events, write registry snapshots, expose RPC methods,
-and keep state that several visuals or pages need.
+and keep state that several webviews or dependent packages need.
 
 Use a native sidecar for heavier trusted work or platform-specific integration.
 Keep the public API small and expose the useful surface through an
@@ -25,21 +24,21 @@ Use extension points, contributions, and resources when a package is meant to
 be extended by other packages. Keep contribution metadata generic and let the
 platform plugin interpret domain-specific meaning.
 
-Use host-owned settings for package configuration. Custom configuration visuals
-can be referenced through `contributes.settings.ui` when the visual declares
-`kind: "config"`. Secret
-values must still stay host-owned; custom configuration surfaces should use
+Use host-owned settings for package configuration. Custom configuration webviews
+can be referenced through `contributes.settings.ui` when the webview declares
+`kind: "settings"`. Secret values must still stay host-owned; custom
+configuration surfaces should use
 `context.configuration.secrets` only for configured state plus set/clear flows.
 
 ## Design The Runtime Data Flow
 
 Prefer one clear state owner. For telemetry-derived package state, subscribe in
 a service, normalize the data, write a registry snapshot, and publish a
-`plugin.<package-id>.*` event when visuals should update immediately.
+`plugin.<package-id>.*` event when webviews or dependent packages should update
+immediately.
 
-Keep visual code instance-local. Store DOM nodes, latest render state, cleanup
-callbacks, and settings per `context.root`, especially when a visual can appear
-multiple times in the same layout or page.
+Keep webview code instance-local. Store DOM nodes, latest render state, cleanup
+callbacks, and settings per `context.root`.
 
 Use service RPC for explicit requests, such as `snapshot`, `configure`, or
 `reset`. Use bus events for streams and notifications. Use the registry for the
@@ -48,51 +47,17 @@ latest known shared value.
 Keep RPC inputs and outputs JSON-compatible. They cross a host-mediated
 boundary and should be easy to validate, serialize, and inspect.
 
-## Make Editor Mode Useful
+## Design Webviews As Runtime Clients
 
-Editor mode is for visual authoring, not for simulating the full backend.
+Render inside `context.root` and treat that element as the sizing boundary.
+Use `context.dimensions` when layout depends on the host-opened window size.
 
-Provide a readable default state when the visual would otherwise be blank
-without live data. For example, a scoreboard can show placeholder teams and a
-score, while a goal animation can stay idle until the author triggers it.
+Keep browser entries portable. Do not assume filesystem paths, global routes,
+or host-owned overlay/page chrome. Use package resources, services, the event
+bus, and the SDK bridge for data and coordination.
 
-Expose editor actions for meaningful states:
-
-- different teams or sides;
-- common scores or time states;
-- transient animations such as goal and victory;
-- empty, loading, and error states when they affect layout.
-
-Do not publish editor actions to the real host bus. Use `context.editor.emit`
-so the event reaches only the visual's own `context.bus.subscribe` handlers in
-the editor renderer.
-
-Avoid automatic transient triggers on editor mount. Starting with an idle or
-default state makes the visual inspectable and lets the author trigger goal,
-victory, or replay states intentionally.
-
-Use preview mode when the question is whether the real chain works. Preview
-should exercise the normal visual mount path, service calls, backend-derived
-state, registry reads, and host-mediated event access.
-
-## Render Inside The Host Box
-
-The host owns the outer rectangle. Render inside `context.root` and treat that
-element as the sizing boundary.
-
-For fluid widgets, use CSS that fills the root with `width: 100%` and
-`height: 100%`.
-
-For fixed-design broadcast graphics, keep an inner design surface at a known
-size and scale it with a `ResizeObserver`. Disconnect observers and timers from
-the cleanup returned by `mount`.
-
-Implement `update(context)` when settings, opacity, metadata, or other
-host-provided values affect the output. Remounting is a fallback, not the
-normal refresh mechanism.
-
-Do not position content against the viewport, mutate DOM outside
-`context.root`, or depend on editor reloads to apply visual changes.
+Return cleanup callbacks from `mount` when a webview subscribes to events,
+starts timers, or attaches DOM listeners.
 
 ## Keep Access Narrow
 
@@ -128,5 +93,5 @@ Use `npm run validate` before packing or installing locally. Use
 host will enforce.
 
 Document package-owned events, registry keys, cross-package usage choices, and
-settings in the package README. That keeps marketplace review and host debugging
+settings in the package README. That keeps package review and host debugging
 tractable.

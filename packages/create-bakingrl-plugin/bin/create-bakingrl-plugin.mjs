@@ -13,12 +13,7 @@ const templates = [
   {
     id: "extension-plugin",
     label: "Extension Plugin Package",
-    description: "Manifest v4 with a Node extension runtime and a visual contribution."
-  },
-  {
-    id: "overlay-plugin",
-    label: "Overlay Plugin Package",
-    description: "Manifest v4 with a Node runtime and overlay-style visual contribution."
+    description: "Manifest v4 with a Node extension runtime, service, and webview."
   },
   {
     id: "native-sidecar-plugin",
@@ -28,7 +23,7 @@ const templates = [
   {
     id: "platform-plugin",
     label: "Platform Plugin Package",
-    description: "Manifest v4 with an extension point, service, visual, and webview."
+    description: "Manifest v4 with an extension point, service, resources, and webview."
   },
   {
     id: "contributor-plugin",
@@ -91,7 +86,7 @@ function sdkDependency(packageDir) {
   const localSdkPath = resolve(packageRoot, "..", "plugin-sdk");
   if (existsSync(localSdkPath)) return packageRelativeFileDependency(packageDir, localSdkPath);
 
-  return "^2.1.1";
+  return "^2.2.0";
 }
 
 function copyTemplate(source, target, replacements) {

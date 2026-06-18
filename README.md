@@ -13,13 +13,12 @@ A BakingRL plugin package can expose one or more runtime surfaces:
 
 - A Node extension host with `activate(context)` and `deactivate()`.
 - Commands and services registered from extension host code.
-- Browser visuals rendered in overlays, OBS browser sources, pages, and
-  webviews.
+- Host-opened browser webviews for tools, settings, and panels.
 - Plugin extension points and contributions for host-mediated plugin chains.
 - Public and private package resources consumed through host policy.
 - First-class native Rust or system sidecars supervised over JSON-RPC stdio.
-- Host-rendered package settings, secret metadata, resources, schemas,
-  diagnostics, and host-managed render surfaces.
+- Host-owned package settings, secret metadata, resources, schemas,
+  diagnostics, telemetry, and plugin graph mediation.
 
 ## Repository Layout
 
@@ -65,7 +64,7 @@ npm run pack
 Published scaffolds use the published SDK package:
 
 ```json
-"@bakingrl/plugin-sdk": "^2.1.1"
+"@bakingrl/plugin-sdk": "^2.2.0"
 ```
 
 ## Local Global Install
@@ -146,7 +145,7 @@ npm run docs:dev
 ## Compatibility
 
 This SDK targets BakingRL plugin package schema `bakingrl.plugin/4`, SDK
-version `2.1.1`, and `bakingrlApi: "2.1.0"` for the current V4 runtime
+version `2.2.0`, and `bakingrlApi: "2.2.0"` for the current V4 runtime
 contract. The helper CLI validates compatible package manifests in the
-`>=2.0.0 <=2.1.x` runtime API window. A manifest declaring `2.2.0` or newer
-requires a newer host and is rejected for this target.
+`2.2.x` runtime API window. Manifests outside `2.2.x` require a different host
+target and are rejected for this SDK target.

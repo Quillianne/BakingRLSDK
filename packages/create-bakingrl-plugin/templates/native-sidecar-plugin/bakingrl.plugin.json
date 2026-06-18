@@ -1,6 +1,6 @@
 {
   "schemaVersion": "bakingrl.plugin/4",
-  "bakingrlApi": "2.1.0",
+  "bakingrlApi": "2.2.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
@@ -35,7 +35,6 @@
         "methods": ["ping"]
       }
     ],
-    "visuals": [],
     "settings": {}
   }
 }

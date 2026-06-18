@@ -1,6 +1,6 @@
 {
   "name": "@bakingrl/create-plugin",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Create BakingRL plugin packages from official templates.",
   "type": "module",
   "license": "MIT",

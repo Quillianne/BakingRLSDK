@@ -5,12 +5,12 @@
 
 The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v4 plugin
 contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/4`,
-SDK `2.1.1`, and `bakingrlApi: "2.1.0"` for new packages.
+SDK `2.2.0`, and `bakingrlApi: "2.2.0"` for new packages.
 
 The SDK is an authoring contract. Runtime behavior is provided by the host:
 package loading, extension host supervision, bridge calls, service routing,
-first-class sidecars, storage, secrets, diagnostics, overlays, host-owned pages
-and windows, and the OBS gateway for package-owned OBS browser surfaces.
+first-class sidecars, storage, settings, secrets, diagnostics, webviews,
+resources, telemetry, and plugin graph resolution.
 
 ## Import Surface
 
@@ -19,15 +19,14 @@ import {
   SDK_VERSION,
   RUNTIME_API_VERSION,
   defineExtension,
-  defineVisual,
+  defineWebview,
   createCleanup,
-  createMockVisualContext,
   createWebviewBridge,
   createExtensionTarget,
   createResourceRef,
   type ExtensionContext,
   type PluginManifestV4,
-  type VisualContext,
+  type WebviewContext,
   type WebviewBridge
 } from "@bakingrl/plugin-sdk";
 ```
@@ -84,7 +83,6 @@ export const deactivate = extension.deactivate;
 - `extensions.points` and `extensions.contributions`;
 - `resources.list`, `resources.read`, `resources.readText`, and
   `resources.readJson`;
-- `overlays.list` and `overlays.refresh`;
 - `sidecars.start`, `sidecars.stop`, `sidecars.restart`, and `sidecars.call`;
 - `telemetry.event`;
 - `diagnostics` and `logger`.
@@ -104,10 +102,10 @@ Extension host code reads the resolved graph through host-mediated APIs:
 ```ts
 const plugins = await context.plugins.list();
 const points = await context.extensions.points({
-  packageId: "com.example.overlay_studio"
+  packageId: "com.example.platform"
 });
 const contributions = await context.extensions.contributions(
-  "com.example.overlay_studio/visuals"
+  "com.example.platform/items"
 );
 ```
 
@@ -116,46 +114,6 @@ manifest and runtime use. `context.extensions.contributions(...)` only returns
 contributions that the host considers usable for the current package graph.
 External contribution targets require a matching top-level dependency; self
 targets only need the local extension point.
-
-## Visuals
-
-Browser visuals are declared through `contributes.visuals` and implemented with
-`defineVisual`:
-
-```ts
-import { defineVisual, type VisualContext } from "@bakingrl/plugin-sdk";
-
-export default defineVisual({
-  mount(context: VisualContext) {
-    context.root.textContent = "Hello BakingRL";
-  },
-  update(context: VisualContext) {
-    context.root.style.opacity = String(context.item.opacity);
-  },
-  editor: {
-    mount(context: VisualContext) {
-      context.root.textContent = "Editor preview";
-    }
-  }
-});
-```
-
-`VisualContext` contains the DOM root, package metadata, the overlay/editor
-item rectangle, visual settings, editor mode, bus subscription, registry reads,
-service calls, asset URL resolution, and diagnostics. When a visual is mounted
-as a package configuration surface through `contributes.settings.ui`, the
-context also includes `configuration`:
-
-```ts
-const saved = await context.configuration?.settings.get();
-await context.configuration?.settings.update({ accentColor: "#ffcc66" });
-const apiKeyReady = await context.configuration?.secrets.configured("apiKey");
-```
-
-`configuration.settings` saves through the host settings pipeline, so schema
-defaults, sanitization, and runtime reload behavior stay host-owned. Secret
-configuration supports configured checks plus set/clear; custom configuration
-visuals do not receive secret values through `context.settings`.
 
 ## Webviews
 
@@ -175,8 +133,23 @@ export default defineWebview({
 
 `context.settings.save(values)` persists host-owned package settings and
 `context.settings.subscribe(callback)` follows later settings changes.
+When a webview is referenced by `contributes.settings.ui` and declares
+`kind: "settings"`, `context.configuration` can expose the host-owned settings
+and secret configuration helpers:
+
+```ts
+const saved = await context.configuration?.settings.get();
+await context.configuration?.settings.update({ accentColor: "#ffcc66" });
+const apiKeyReady = await context.configuration?.secrets.configured("apiKey");
+```
+
+`configuration.settings` saves through the host settings pipeline, so schema
+defaults, sanitization, and runtime reload behavior stay host-owned. Secret
+configuration supports configured checks plus set/clear; custom configuration
+webviews do not receive secret values through `context.settings`.
+
 `context.telemetryHub` exposes the same host-owned Rocket League stream used by
-extensions and visuals:
+extensions:
 
 ```ts
 const snapshot = await context.telemetryHub.snapshot<"UpdateState">();
@@ -187,8 +160,8 @@ const cleanup = context.telemetryHub.subscribe("UpdateState", (event) => {
 
 ## Browser Bridge
 
-Browser visuals use the SDK bridge when they need structured communication with
-the host-rendered container. They communicate with the host through
+Browser entries can use the SDK bridge when they need structured communication
+with a host-opened container. They communicate with the host through
 `postMessage`.
 
 ```ts
@@ -206,10 +179,11 @@ const bridge = createWebviewBridge({
 });
 ```
 
-The host owns windowing. Packages own declared OBS browser surfaces through
-`externalSurfaces.obs`; the host OBS gateway serves and supervises those
-surfaces. Browser entries should stay portable and only depend on the bridge and
-packaged assets.
+The host owns webview opening and runtime mediation. Domain surfaces such as
+overlay editors, OBS workflows, and remote browser gateways should be modeled
+as plugin-owned services, resources, webviews, and extension point contracts.
+Browser entries should stay portable and only depend on the bridge and packaged
+assets.
 
 ## Resources
 
@@ -246,14 +220,11 @@ The current protocol is JSON-RPC 2.0 over newline-delimited stdio.
 
 ## Utilities
 
-`SDK_VERSION` is `2.1.1`.
+`SDK_VERSION` is `2.2.0`.
 
-`RUNTIME_API_VERSION` is `2.1.0`, matching the manifest value
-`bakingrlApi: "2.1.0"` used by new packages.
+`RUNTIME_API_VERSION` is `2.2.0`, matching the manifest value
+`bakingrlApi: "2.2.0"` used by new packages.
 
 `setting(settings, key, fallback)` reads a typed value with a fallback.
 
 `createCleanup()` collects cleanup callbacks and runs them in reverse order.
-
-`createMockVisualContext()` helps browser visual tests without starting the
-host.

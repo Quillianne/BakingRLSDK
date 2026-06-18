@@ -13,7 +13,6 @@
 
 ```sh
 create-bakingrl-plugin my-plugin
-create-bakingrl-plugin my-overlay --template overlay-plugin
 create-bakingrl-plugin my-native --template native-sidecar-plugin
 create-bakingrl-plugin my-platform --template platform-plugin
 create-bakingrl-plugin my-contributor --template contributor-plugin
@@ -23,18 +22,17 @@ create-bakingrl-plugin my-content --template content-pack-plugin
 Available templates:
 
 - `extension-plugin`: extension host entry plus a webview contribution.
-- `overlay-plugin`: extension host entry plus an overlay contribution.
 - `native-sidecar-plugin`: extension host entry plus a Rust JSON-RPC stdio
   sidecar.
-- `platform-plugin`: extension host service, visual, webview, public resource,
+- `platform-plugin`: extension host service, webview, public resource,
   and extension point for other packages.
-- `contributor-plugin`: dependency-backed contribution with a service, visual,
+- `contributor-plugin`: dependency-backed contribution with a service,
   and public resource.
 - `content-pack-plugin`: resource-only package that contributes public JSON and
   SVG content to another package.
 
 Generated packages declare `schemaVersion: "bakingrl.plugin/4"`, and
-`bakingrlApi: "2.1.0"`.
+`bakingrlApi: "2.2.0"`.
 
 ## Validate
 
@@ -45,15 +43,15 @@ bakingrl-plugin validate .
 Validation checks:
 
 - manifest schema, id, name, version, `bakingrlApi` compatibility, runtime,
-  dependencies, contributes, host-owned settings, and external surfaces;
-- built JavaScript entries for extension host and declared visuals;
+  dependencies, contributes, and host-owned settings;
+- built JavaScript entries for extension host and declared webviews;
 - sidecar command paths and `jsonrpc-stdio` declarations;
 - sidecar health-check declarations when present;
 - package-local paths for declared contribution schemas, resources, webviews,
   and runtime entries;
 - dependency-backed cross-package contributions;
 - local references from extension points and contributions to declared
-  services, visuals, and resources;
+  services and resources;
 - absence of bundled Node runtime binaries such as `node`, `node.exe`, or
   `bin/node*`.
 
@@ -61,8 +59,7 @@ Current validation accepts `contributes.extensionPoints`,
 `contributes.contributions`, `contributes.resources`, and
 `contributes.webviews`. A contribution targeting another package must declare a
 matching top-level dependency. Runtime API validation accepts manifests in the
-`>=2.0.0 <=2.1.x` window and rejects `2.2.0` or newer as requiring a newer
-host.
+`2.2.x` window and rejects manifests outside that target.
 
 ## Doctor
 
@@ -80,8 +77,7 @@ bakingrl-plugin inspect .
 ```
 
 `inspect` prints the normalized v4 manifest surface used by the host:
-`schemaVersion`, `bakingrlApi`, `runtime`, `contributes`, and
-`externalSurfaces`.
+`schemaVersion`, `bakingrlApi`, `runtime`, and `contributes`.
 
 ## Pack
 
@@ -111,21 +107,3 @@ bakingrl-plugin install-local .
 
 This copies the package into the BakingRL app data package directory. Use it
 after `npm run build` when testing a package in the host app.
-
-## Marketplace Metadata
-
-The helper can validate marketplace listings and generate release metadata:
-
-```sh
-bakingrl-plugin validate-listing .
-bakingrl-plugin release-metadata . --bundle-url <url> --listing-url <url> --platform any
-bakingrl-plugin marketplace-entry . --developer <id> --bundle-url <url> --listing-url <url> --platform any
-```
-
-`--platform` defaults to `any`. Native sidecar packages should publish one
-artifact per supported platform using `darwin-arm64`, `darwin-x64`,
-`linux-x64`, or `windows-x64`.
-
-Marketplace metadata includes `bakingrlApi`, reviewed `artifacts` with bundle
-hashes and signature public keys, review metadata, and other host-facing
-package fields.

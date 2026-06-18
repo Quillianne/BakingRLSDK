@@ -8,6 +8,12 @@ This source is English-only for now. Future French documentation should use a
 separate source directory or build target with the same stable slugs, instead
 of mixing languages inside the same page.
 
+Current docs target runtime API `2.2.0`: BakingRL is documented as a minimal
+host for package installation, settings and secrets, webviews, services,
+extension points, contributions, resources, telemetry, state, sidecars, and
+diagnostics. Host-owned package pages, overlays, OBS surfaces, browser visuals,
+and advanced marketplace flows should not be documented as SDK primitives.
+
 ```txt
 main.qd
 _nav.qd

@@ -19,7 +19,6 @@ bakingrl-plugin
 
 ```sh
 create-bakingrl-plugin my-package
-create-bakingrl-plugin overlay-package --template overlay-plugin
 create-bakingrl-plugin native-package --template native-sidecar-plugin
 create-bakingrl-plugin platform-package --template platform-plugin
 create-bakingrl-plugin contributor-package --template contributor-plugin
@@ -37,14 +36,14 @@ Generated packages include `scripts/bakingrl-plugin.mjs`, but the global
 and install V4 plugin packages during development.
 
 New packages declare `bakingrlApi` with the current BakingRL runtime API
-(`2.1.0`). The helper validates the current V4 contract and accepts compatible
-package manifests in the `>=2.0.0 <=2.1.x` runtime API window. Manifests that
-declare `2.2.0` or newer require a newer host and are rejected by this target
-validator.
+(`2.2.0`). The helper validates the current V4 contract and accepts compatible
+package manifests in the `2.2.x` runtime API window. Manifests outside `2.2.x`
+require a different host target and are rejected by this target validator.
 
-Current templates are `extension-plugin`, `overlay-plugin`,
-`native-sidecar-plugin`, `platform-plugin`, `contributor-plugin`, and
+Current templates are `extension-plugin`, `native-sidecar-plugin`,
+`platform-plugin`, `contributor-plugin`, and
 `content-pack-plugin`. Package-level settings schema moved to
-`contributes.settings.schema` and remains host-owned. Browser visuals,
-webviews, extension points, contributions, and resources are declared through
-`contributes`.
+`contributes.settings.schema` and remains host-owned. Custom settings UI uses
+`contributes.settings.ui` to reference a declared webview with
+`kind: "settings"`. Webviews, extension points, contributions, resources, and
+services are declared through `contributes`.

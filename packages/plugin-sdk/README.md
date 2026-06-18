@@ -11,34 +11,8 @@ npm install @bakingrl/plugin-sdk
 ## Usage
 
 ```ts
-import { defineVisual, defineWebview, type VisualContext, type WebviewContext } from "@bakingrl/plugin-sdk";
+import { defineWebview, type WebviewContext } from "@bakingrl/plugin-sdk";
 
-export default defineVisual({
-  mount(context: VisualContext) {
-    context.root.textContent = "Hello BakingRL";
-  },
-  editor: {
-    mount(context: VisualContext) {
-      context.root.textContent = "Editor preview";
-    },
-    actions() {
-      return [
-        {
-          id: "trigger",
-          label: "Trigger",
-          run(context: VisualContext) {
-            context.root.textContent = "Triggered";
-          }
-        }
-      ];
-    }
-  }
-});
-```
-
-Declared webviews export a `mount(context)` module too:
-
-```ts
 export default defineWebview({
   async mount(context: WebviewContext) {
     const settings = await context.settings.get();
@@ -48,10 +22,26 @@ export default defineWebview({
 });
 ```
 
+Extensions can register commands and services:
+
+```ts
+import { defineExtension, type ExtensionContext } from "@bakingrl/plugin-sdk";
+
+export const activate = defineExtension({
+  activate(context: ExtensionContext) {
+    context.services.register("echo", {
+      ping(input) {
+        return { ok: true, input };
+      }
+    });
+  }
+}).activate;
+```
+
 This SDK targets BakingRL trusted plugin package schema `bakingrl.plugin/4`,
-SDK version `2.1.1`, and `bakingrlApi: "2.1.0"` for the current V4 runtime
-contract. Compatible packages target `>=2.0.0 <=2.1.x`; `2.2.0` and newer are
-treated as requiring a newer host.
+SDK version `2.2.0`, and `bakingrlApi: "2.2.0"` for the current V4 runtime
+contract. Compatible packages target `2.2.x`; manifests outside `2.2.x`
+require a different host target.
 
 See the repository `docs-src/` documentation for the full SDK API, manifest
 format, telemetry types, and security model.
