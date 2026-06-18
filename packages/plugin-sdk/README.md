@@ -38,6 +38,20 @@ export const activate = defineExtension({
 }).activate;
 ```
 
+Browser webview entries can use the host bridge without copying the internal
+`postMessage` protocol:
+
+```ts
+import { createWebviewBridge } from "@bakingrl/plugin-sdk";
+
+const bridge = createWebviewBridge();
+bridge.ready();
+
+const asset = await bridge.request<{ url: string }>("bakingrl:asset-url", {
+  ref: "resources/logo.svg"
+});
+```
+
 This SDK targets BakingRL trusted plugin package schema `bakingrl.plugin/4`,
 SDK version `2.2.0`, and `bakingrlApi: "2.2.0"` for the current V4 runtime
 contract. Compatible packages target `2.2.x`; manifests outside `2.2.x`

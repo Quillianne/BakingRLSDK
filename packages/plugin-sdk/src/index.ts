@@ -495,29 +495,35 @@ export type PluginManifestV4 = {
 };
 
 export type WebviewMessage<TType extends string = string, TPayload = unknown> = {
+  source?: string;
   type: TType;
+  id?: string | number;
   payload?: TPayload;
   requestId?: string;
+  error?: string;
 };
 
 export type WebviewRequest<TType extends string = string, TPayload = unknown> = WebviewMessage<TType, TPayload> & {
-  requestId: string;
+  id: string | number;
 };
 
 export type WebviewResponse<TPayload = unknown> = {
-  type: "response";
-  requestId: string;
+  source?: string;
+  type: "response" | string;
+  id?: string | number;
+  requestId?: string;
   payload?: TPayload;
   error?: string;
 };
 
 export type WebviewEndpoint = {
   postMessage<TType extends string, TPayload>(message: WebviewMessage<TType, TPayload>): void | Promise<void>;
-  onMessage<TMessage extends WebviewMessage>(handler: (message: TMessage) => void | Promise<void>): ExtensionSubscription;
+  onMessage(handler: (message: WebviewMessage) => void | Promise<void>): ExtensionSubscription;
 };
 
 export type WebviewBridge = {
   post<TType extends string, TPayload = unknown>(type: TType, payload?: TPayload): void | Promise<void>;
+  ready(): void | Promise<void>;
   request<TOutput = unknown, TType extends string = string, TPayload = unknown>(
     type: TType,
     payload?: TPayload
@@ -562,26 +568,56 @@ export function createResourceRef(packageId: string, resourceId: string): string
   return `${packageId}/${resourceId}`;
 }
 
-export function createWebviewBridge(endpoint: WebviewEndpoint): WebviewBridge {
+export function createWindowWebviewEndpoint(targetOrigin = "*", windowRef = globalThis.window): WebviewEndpoint {
+  if (!windowRef?.parent || !windowRef.addEventListener || !windowRef.removeEventListener) {
+    throw new Error("createWindowWebviewEndpoint requires a browser window.");
+  }
+  return {
+    postMessage(message) {
+      windowRef.parent.postMessage(message, targetOrigin);
+    },
+    onMessage(handler) {
+      const listener = (event: MessageEvent) => {
+        if (isRecord(event.data)) void handler(event.data as WebviewMessage);
+      };
+      windowRef.addEventListener("message", listener);
+      return {
+        dispose() {
+          windowRef.removeEventListener("message", listener);
+        }
+      };
+    }
+  };
+}
+
+export function createWebviewBridge(endpoint: WebviewEndpoint = createWindowWebviewEndpoint()): WebviewBridge {
   return {
     post(type, payload) {
-      return endpoint.postMessage({ type, payload });
+      return endpoint.postMessage({ source: WEBVIEW_SOURCE, type, payload });
+    },
+    ready() {
+      return endpoint.postMessage({ source: WEBVIEW_SOURCE, type: "bakingrl:webview:ready" });
     },
     request(type, payload) {
-      const requestId = createRequestId();
+      const id = createRequestId();
       return new Promise((resolve, reject) => {
-        const subscription = endpoint.onMessage<WebviewResponse>((message) => {
-          if (message.type !== "response" || message.requestId !== requestId) return;
+        const subscription = endpoint.onMessage((message) => {
+          if (!isWebviewResponseFor(message, type, id)) return;
           void Promise.resolve(subscription.dispose()).finally(() => {
-            if (message.error) reject(new Error(message.error));
+            const payload = isRecord(message.payload) ? message.payload : undefined;
+            const error = message.error ?? (typeof payload?.error === "string" ? payload.error : undefined);
+            if (error) reject(new Error(error));
             else resolve(message.payload as never);
           });
         });
-        void endpoint.postMessage({ type, payload, requestId });
+        void endpoint.postMessage({ source: WEBVIEW_SOURCE, type, payload, id });
       });
     },
     on(handler) {
-      return endpoint.onMessage(handler);
+      return endpoint.onMessage((message) => {
+        if (message.source !== HOST_SOURCE) return;
+        return handler(message as never);
+      });
     }
   };
 }
@@ -613,4 +649,17 @@ function createRequestId(): string {
     return crypto.randomUUID();
   }
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+}
+
+const HOST_SOURCE = "bakingrl-host";
+const WEBVIEW_SOURCE = "bakingrl-webview";
+
+function isWebviewResponseFor(message: WebviewResponse | WebviewMessage, type: string, id: string): boolean {
+  if (message.source !== HOST_SOURCE) return false;
+  if (message.id !== id && message.requestId !== id) return false;
+  return message.type === `${type}:result` || message.type === "response";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

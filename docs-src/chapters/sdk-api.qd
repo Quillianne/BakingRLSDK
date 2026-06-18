@@ -167,17 +167,19 @@ with a host-opened container. They communicate with the host through
 ```ts
 import { createWebviewBridge } from "@bakingrl/plugin-sdk";
 
-const bridge = createWebviewBridge({
-  postMessage(message) {
-    window.parent.postMessage(message, "*");
-  },
-  onMessage(handler) {
-    const listener = (event: MessageEvent) => handler(event.data);
-    window.addEventListener("message", listener);
-    return { dispose: () => window.removeEventListener("message", listener) };
-  }
+const bridge = createWebviewBridge();
+
+bridge.ready();
+
+const asset = await bridge.request<{ url: string }>("bakingrl:asset-url", {
+  ref: "resources/logo.svg"
 });
 ```
+
+`createWebviewBridge()` uses the BakingRL webview protocol by default:
+messages are tagged as `bakingrl-webview`, host responses are matched by
+request id, and incoming messages are filtered to `bakingrl-host`. Tests or
+custom containers can still pass a custom endpoint.
 
 The host owns webview opening and runtime mediation. Domain surfaces such as
 overlay editors, OBS workflows, and remote browser gateways should be modeled

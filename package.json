@@ -18,7 +18,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspace @bakingrl/plugin-sdk",
-    "check": "npm run build --workspace @bakingrl/plugin-sdk && npm run test:cli",
+    "check": "npm run build --workspace @bakingrl/plugin-sdk && npm run test:sdk && npm run test:cli",
+    "test:sdk": "node --test packages/plugin-sdk/test/*.test.mjs",
     "test:cli": "node --test packages/create-bakingrl-plugin/test/*.test.mjs",
     "create": "node packages/create-bakingrl-plugin/bin/create-bakingrl-plugin.mjs",
     "helper": "node packages/create-bakingrl-plugin/lib/bakingrl-plugin.mjs",
