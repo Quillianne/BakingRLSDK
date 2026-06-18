@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 const cli = new URL("../lib/bakingrl-plugin.mjs", import.meta.url);
 const createCli = new URL("../bin/create-bakingrl-plugin.mjs", import.meta.url);
 const sidecarBin = "sidecars/native-helper/bin";
+const legacyContributes = ["pages", "views", "overlays", "configuration", "visuals", "assets", "schemas"];
 
 function withPackage(manifest, callback) {
   const dir = mkdtempSync(join(tmpdir(), "bakingrl-sdk-validate-"));
@@ -73,6 +74,27 @@ function validateGeneratedPackage(packageDir) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"]
   });
+}
+
+function assertGeneratedV4Manifest(packageDir, expectedId) {
+  const manifest = readJson(join(packageDir, "bakingrl.plugin.json"));
+  assert.equal(manifest.schemaVersion, "bakingrl.plugin/4");
+  assert.equal(manifest.bakingrlApi, "2.2.0");
+  assert.equal(manifest.id, expectedId);
+  assert.equal(manifest.compatibility, undefined);
+  assert.equal(manifest.externalSurfaces, undefined);
+  for (const group of legacyContributes) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(manifest.contributes ?? {}, group),
+      false,
+      `generated ${expectedId} should not declare contributes.${group}`
+    );
+  }
+  return manifest;
+}
+
+function expectedIdForScaffold(name) {
+  return `com.example.${name.replaceAll("-", "_")}`;
 }
 
 function baseManifest(overrides = {}) {
@@ -278,24 +300,52 @@ test("pack accepts an explicit package directory without signing", () => {
   });
 });
 
-test("scaffolder creates valid platform contributor and content pack templates", () => {
+test("scaffolder creates valid runtime 2.2 package templates", () => {
   withTempDir((root) => {
+    const extension = scaffoldPackage(root, "extension-template", "extension-plugin");
+    writeGeneratedEntry(extension, "dist/extension/index.js");
+    writeGeneratedEntry(extension, "dist/webviews/home.js");
+    validateGeneratedPackage(extension);
+    const extensionManifest = assertGeneratedV4Manifest(extension, expectedIdForScaffold("extension-template"));
+    assert.equal(extensionManifest.runtime.node.entry, "dist/extension/index.js");
+    assert.equal(extensionManifest.runtime.sidecars.length, 0);
+    assert.equal(extensionManifest.contributes.services[0].runtime, "node");
+    assert.equal(extensionManifest.contributes.webviews[0].kind, "tool");
+
+    const native = scaffoldPackage(root, "native-template", "native-sidecar-plugin");
+    writeGeneratedEntry(native, "dist/extension/index.js");
+    writeGeneratedEntry(native, "sidecars/native-helper/target/release/native-template-sidecar");
+    validateGeneratedPackage(native);
+    const nativeManifest = assertGeneratedV4Manifest(native, expectedIdForScaffold("native-template"));
+    assert.equal(nativeManifest.runtime.sidecars[0].id, "native-helper");
+    assert.equal(nativeManifest.runtime.sidecars[0].protocol, "jsonrpc-stdio");
+    assert.equal(nativeManifest.runtime.sidecars[0].healthCheck.method, "ping");
+    assert.equal(nativeManifest.contributes.services[0].runtime, "sidecar:native-helper");
+
     const platform = scaffoldPackage(root, "platform-template", "platform-plugin");
     writeGeneratedEntry(platform, "dist/extension/index.js");
     writeGeneratedEntry(platform, "dist/webviews/home.js");
     validateGeneratedPackage(platform);
-    assert.equal(readJson(join(platform, "bakingrl.plugin.json")).contributes.extensionPoints[0].service, "platform");
+    const platformManifest = assertGeneratedV4Manifest(platform, expectedIdForScaffold("platform-template"));
+    assert.equal(platformManifest.contributes.services[0].runtime, "node");
+    assert.equal(platformManifest.contributes.extensionPoints[0].service, "platform");
+    assert.equal(platformManifest.contributes.webviews[0].kind, "tool");
+    assert.equal(platformManifest.contributes.resources[0].visibility, "public");
 
     const contributor = scaffoldPackage(root, "contributor-template", "contributor-plugin");
     writeGeneratedEntry(contributor, "dist/extension/index.js");
     validateGeneratedPackage(contributor);
-    assert.equal(readJson(join(contributor, "bakingrl.plugin.json")).dependencies[0].packageId, "com.example.platform");
+    const contributorManifest = assertGeneratedV4Manifest(contributor, expectedIdForScaffold("contributor-template"));
+    assert.equal(contributorManifest.dependencies[0].packageId, "com.example.platform");
+    assert.equal(contributorManifest.contributes.contributions[0].target, "com.example.platform/items");
+    assert.deepEqual(contributorManifest.contributes.contributions[0].resources, ["contributionData"]);
 
     const content = scaffoldPackage(root, "content-template", "content-pack-plugin");
     validateGeneratedPackage(content);
-    const contentManifest = readJson(join(content, "bakingrl.plugin.json"));
+    const contentManifest = assertGeneratedV4Manifest(content, expectedIdForScaffold("content-template"));
     assert.equal(contentManifest.runtime, undefined);
     assert.equal(contentManifest.contributes.resources.length, 2);
+    assert.equal(contentManifest.contributes.contributions[0].target, "com.example.contributor/content");
     assert.ok(existsSync(join(content, "resources", "badges", "blue.svg")));
   });
 });
