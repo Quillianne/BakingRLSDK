@@ -37,6 +37,17 @@ export type TelemetryHub = {
     | Promise<BakingRLEvent<BakingRLEventData<TEvent>, TEvent> | null>;
 };
 
+export function isBakingRLEvent<TEvent extends string = string>(
+  value: unknown,
+  eventName?: TEvent
+): value is BakingRLEvent<BakingRLEventData<TEvent>, TEvent> {
+  if (!value || typeof value !== "object") return false;
+  const frame = value as { Event?: unknown; Data?: unknown };
+  if (typeof frame.Event !== "string") return false;
+  if (eventName !== undefined && frame.Event !== eventName) return false;
+  return "Data" in frame;
+}
+
 export type StateHub = {
   read<TValue = unknown>(key: string): Promise<TValue | null>;
   write<TValue = unknown>(key: string, value: TValue): Promise<unknown>;
@@ -268,6 +279,7 @@ export type WebviewContext = {
   packageId: string;
   webviewId: string;
   settings: WebviewSettingsController;
+  telemetryHub: TelemetryHub;
   dimensions: {
     width: number;
     height: number;

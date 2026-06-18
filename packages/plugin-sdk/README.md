@@ -42,7 +42,8 @@ Declared webviews export a `mount(context)` module too:
 export default defineWebview({
   async mount(context: WebviewContext) {
     const settings = await context.settings.get();
-    context.root.textContent = String(settings.title ?? "Tool");
+    const snapshot = await context.telemetryHub.snapshot<"UpdateState">();
+    context.root.textContent = String(settings.title ?? snapshot?.Data.MatchGuid ?? "Tool");
   }
 });
 ```

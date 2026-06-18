@@ -9,6 +9,7 @@ mock frames for local tests.
 ```ts
 import {
   RL_TELEMETRY_EVENT_NAMES,
+  isBakingRLEvent,
   telemetryFrameTemplate,
   mockGoalScored,
   type RlTelemetryEventName,
@@ -39,6 +40,22 @@ context.bus.subscribe("GoalScored", (event) => {
 
 Unknown event names are typed as `unknown`, which is useful for
 plugin-defined events such as `plugin.com.example.package.state`.
+
+`context.telemetryHub.snapshot()` and `context.telemetryHub.getSnapshot()`
+return the latest host-owned telemetry frame known by BakingRL, or `null` when
+no Rocket League frame has been received yet. Extensions, visuals, and webviews
+share the same frame shape.
+
+```ts
+const frame = await context.telemetryHub.snapshot<"UpdateState">();
+
+if (isBakingRLEvent(frame, "UpdateState")) {
+  frame.Data.Game.TimeSeconds;
+}
+```
+
+`isBakingRLEvent(value, eventName?)` is a small runtime guard for code that
+receives an unknown frame or a nullable snapshot.
 
 ## Supported Event Names
 

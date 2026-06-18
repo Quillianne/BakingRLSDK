@@ -175,6 +175,15 @@ export default defineWebview({
 
 `context.settings.save(values)` persists host-owned package settings and
 `context.settings.subscribe(callback)` follows later settings changes.
+`context.telemetryHub` exposes the same host-owned Rocket League stream used by
+extensions and visuals:
+
+```ts
+const snapshot = await context.telemetryHub.snapshot<"UpdateState">();
+const cleanup = context.telemetryHub.subscribe("UpdateState", (event) => {
+  context.root.dataset.match = event.Data.MatchGuid ?? "";
+});
+```
 
 ## Browser Bridge
 
