@@ -29,6 +29,8 @@ can be referenced through `contributes.settings.ui` when the webview declares
 `kind: "settings"`. Secret values must still stay host-owned; custom
 configuration surfaces should use
 `context.configuration.secrets` only for configured state plus set/clear flows.
+Tool and panel webviews can read non-secret settings, but only settings
+webviews should save settings or manage secret configured state.
 
 ## Design The Runtime Data Flow
 
@@ -69,6 +71,10 @@ Use package-scoped names:
 - bus publish: `plugin.<package-id>.*`;
 - registry keys: `plugin.<package-id>.*`;
 - storage: `plugin://self/*`.
+
+If a package needs to read another package registry namespace, declare a
+dependency on that package and prefer service/resource APIs for richer shared
+state.
 
 Treat telemetry, settings, registry values, RPC input, and webview messages as
 untrusted. Validate or narrow values before using them in rendering, state

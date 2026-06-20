@@ -34,6 +34,10 @@ The host can reject obvious out-of-scope bus, registry, storage, and sidecar
 access, but access is enforced as host policy rather than as a strict manifest
 sandbox.
 
+Package bus publishes and registry writes are constrained to
+`plugin.<package-id>.*`. Registry reads outside the caller namespace require a
+declared dependency on the owner package namespace.
+
 Dependencies and contributions are declarations, not direct trust grants. The
 host still mediates service calls, resource reads, webview opening, and
 cross-package discovery at runtime.
@@ -78,8 +82,8 @@ safe by themselves.
 
 - Keep sidecars package-local and talk to them through JSON-RPC stdio.
 - Namespace package events and registry keys under `plugin.<package-id>.*`.
-- Keep cross-package reads and writes explicit in package design; the host applies
-  access policy at runtime.
+- Keep cross-package reads explicit in package design; the host applies access
+  policy at runtime and rejects cross-package registry writes.
 - Implement `deactivate()` and dispose subscriptions.
 - Report failures through `context.diagnostics` or `context.logger`.
 - Never store secrets in source, bundles, logs, settings JSON, or fixtures.

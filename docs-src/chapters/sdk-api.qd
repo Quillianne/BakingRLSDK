@@ -133,6 +133,9 @@ export default defineWebview({
 
 `context.settings.save(values)` persists host-owned package settings and
 `context.settings.subscribe(callback)` follows later settings changes.
+Only webviews declared with `kind: "settings"` can save package settings.
+Other package webviews can read and subscribe to non-secret settings, but write
+flows stay on configuration surfaces.
 The host resolves the module from the manifest-declared webview entry, then
 allows only relative JavaScript imports that stay inside the same declared
 bundle tree. A browser entry should not depend on local package paths, global
@@ -151,7 +154,8 @@ const apiKeyReady = await context.configuration?.secrets.configured("apiKey");
 `configuration.settings` saves through the host settings pipeline, so schema
 defaults, sanitization, and runtime reload behavior stay host-owned. Secret
 configuration supports configured checks plus set/clear; custom configuration
-webviews do not receive secret values through `context.settings`.
+webviews do not receive secret values through `context.settings`. Non-settings
+webviews do not receive the configuration context.
 
 `context.telemetryHub` exposes the same host-owned Rocket League stream used by
 extensions:
@@ -164,7 +168,8 @@ const cleanup = context.telemetryHub.subscribe("UpdateState", (event) => {
 ```
 
 `context.telemetryHub.publish(eventName, payload)` emits a plugin-owned event on
-the shared bus for subscribers. It does not replace the host-owned Rocket League
+the shared bus for subscribers. The event name must be under
+`plugin.<package-id>.*`. It does not replace the host-owned Rocket League
 snapshot returned by `snapshot()` or `getSnapshot()`.
 
 ## Browser Bridge
