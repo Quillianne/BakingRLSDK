@@ -133,6 +133,11 @@ export default defineWebview({
 
 `context.settings.save(values)` persists host-owned package settings and
 `context.settings.subscribe(callback)` follows later settings changes.
+The host resolves the module from the manifest-declared webview entry, then
+allows only relative JavaScript imports that stay inside the same declared
+bundle tree. A browser entry should not depend on local package paths, global
+Tauri commands, or another webview's built output.
+
 When a webview is referenced by `contributes.settings.ui` and declares
 `kind: "settings"`, `context.configuration` can expose the host-owned settings
 and secret configuration helpers:
@@ -189,7 +194,8 @@ The host owns webview opening and runtime mediation. Domain surfaces such as
 overlay editors, OBS workflows, and remote browser gateways should be modeled
 as plugin-owned services, resources, webviews, and extension point contracts.
 Browser entries should stay portable and only depend on the bridge and packaged
-assets.
+assets. Admin package operations are dashboard-only; package webviews receive
+only the mediated package APIs that match their own package window scope.
 
 ## Resources
 

@@ -175,6 +175,13 @@ Browser code runs inside a host-opened container and communicates with the host
 through mediated context APIs, the SDK bridge, and the event bus. It should not
 assume filesystem paths or global routes.
 
+The container is scoped by package id and webview id. Settings, secrets
+metadata, service calls, registry reads, and module loading are accepted only
+when the request comes from the dashboard, the matching configuration/secrets
+window, or the matching package webview. Webview module loading starts from the
+declared entry and only follows relative JavaScript imports that remain inside
+that entry's built bundle tree.
+
 Runtime API 2.2 does not use `contributes.visuals`, host-owned package pages,
 host-owned overlay rendering, or `externalSurfaces`. Domain products such as an
 overlay editor, OBS workflow, scoreboard renderer, or remote browser gateway
