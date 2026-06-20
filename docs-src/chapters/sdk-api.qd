@@ -158,6 +158,10 @@ const cleanup = context.telemetryHub.subscribe("UpdateState", (event) => {
 });
 ```
 
+`context.telemetryHub.publish(eventName, payload)` emits a plugin-owned event on
+the shared bus for subscribers. It does not replace the host-owned Rocket League
+snapshot returned by `snapshot()` or `getSnapshot()`.
+
 ## Browser Bridge
 
 Browser entries can use the SDK bridge when they need structured communication

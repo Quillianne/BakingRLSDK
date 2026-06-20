@@ -23,6 +23,11 @@ export type TelemetryHub = {
     eventName: TEvent,
     callback: (event: BakingRLEvent<BakingRLEventData<TEvent>, TEvent>) => void | Promise<void>
   ): CleanupFn;
+  /**
+   * Publish a plugin-owned event on the shared telemetry bus.
+   * This does not replace the host-owned Rocket League snapshot returned by
+   * snapshot() or getSnapshot().
+   */
   publish<TEvent extends string>(
     eventName: TEvent,
     payload?: BakingRLEventData<TEvent>
