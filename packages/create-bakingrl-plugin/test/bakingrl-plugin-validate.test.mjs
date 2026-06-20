@@ -127,6 +127,15 @@ function writeSidecarBin(packageDir) {
   writeGeneratedEntry(packageDir, sidecarBin);
 }
 
+function writeResource(packageDir, relativePath = "resources/preset.json") {
+  writeGeneratedEntry(packageDir, relativePath);
+}
+
+test("validator requires manifest schema V4", () => {
+  const output = validatePackageFailure(baseManifest({ schemaVersion: "bakingrl.plugin/3" }));
+  assert.match(output, /schemaVersion must be bakingrl\.plugin\/4/);
+});
+
 test("validator accepts runtime API 2.2.x manifests", () => {
   validatePackage(baseManifest({ bakingrlApi: "2.2.0" }));
   validatePackage(baseManifest({ bakingrlApi: "2.2.99" }));
@@ -181,6 +190,118 @@ test("validator rejects removed host-owned visual surfaces", () => {
     }
   }));
   assert.match(output, /contributes\.visuals is not supported in runtime API 2\.2/);
+});
+
+test("validator rejects legacy contribution groups", () => {
+  for (const group of legacyContributes) {
+    const output = validatePackageFailure(baseManifest({
+      contributes: {
+        [group]: []
+      }
+    }));
+    assert.match(output, new RegExp(`contributes\\.${group}.*not supported`));
+  }
+});
+
+test("validator accepts local contributions backed by resources", () => {
+  validatePackage(baseManifest({
+    contributes: {
+      services: [
+        {
+          id: "platform",
+          runtime: "node",
+          methods: ["snapshot"]
+        }
+      ],
+      extensionPoints: [
+        {
+          id: "items",
+          service: "platform"
+        }
+      ],
+      resources: [
+        {
+          id: "preset",
+          path: "resources/preset.json",
+          type: "application/json",
+          visibility: "public"
+        }
+      ],
+      contributions: [
+        {
+          id: "starter",
+          target: "com.example.package/items",
+          service: "platform",
+          resources: ["preset"],
+          metadata: {
+            category: "starter"
+          }
+        }
+      ]
+    }
+  }), writeResource);
+});
+
+test("validator rejects contributions that reference unknown resources", () => {
+  const output = validatePackageFailure(baseManifest({
+    contributes: {
+      extensionPoints: [
+        {
+          id: "items"
+        }
+      ],
+      resources: [
+        {
+          id: "preset",
+          path: "resources/preset.json",
+          type: "application/json",
+          visibility: "public"
+        }
+      ],
+      contributions: [
+        {
+          id: "starter",
+          target: "com.example.package/items",
+          resources: ["missing"]
+        }
+      ]
+    }
+  }), writeResource);
+
+  assert.match(output, /resources references unknown contributes\.resources id 'missing'/);
+});
+
+test("validator rejects invalid resource declarations", () => {
+  const missingTypeOutput = validatePackageFailure(baseManifest({
+    contributes: {
+      resources: [
+        {
+          id: "preset",
+          path: "resources/preset.json",
+          visibility: "public"
+        }
+      ]
+    }
+  }), writeResource);
+  assert.match(missingTypeOutput, /resources\[0\]\.type is required for public resources/);
+
+  const duplicatedPathOutput = validatePackageFailure(baseManifest({
+    contributes: {
+      resources: [
+        {
+          id: "preset",
+          path: "resources/preset.json",
+          paths: ["resources/extra.json"],
+          type: "application/json",
+          visibility: "public"
+        }
+      ]
+    }
+  }), (dir) => {
+    writeResource(dir, "resources/preset.json");
+    writeResource(dir, "resources/extra.json");
+  });
+  assert.match(duplicatedPathOutput, /resources\[0\] must declare either path or paths, not both/);
 });
 
 test("validator rejects contribution visual references", () => {
