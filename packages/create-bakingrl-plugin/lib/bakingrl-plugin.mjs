@@ -49,6 +49,7 @@ const supportedContributionSections = new Set([
   "webviews"
 ]);
 const allowedWebviewKinds = new Set(["tool", "settings", "panel"]);
+const supportedSettingSchemaTypes = new Set(["string", "number", "integer", "boolean", "array", "object"]);
 const sidecarRuntimePattern = /^sidecar:[a-zA-Z0-9._-]+$/;
 const sidecarActivationModes = new Set(["manual", "onEnable", "onStartup"]);
 const sidecarProtocol = "jsonrpc-stdio";
@@ -229,15 +230,16 @@ function validatePackageRelativePath(packageDir, label, rawPath, artifactLabel) 
   if (statSync(artifactPath).isFile() && statSync(artifactPath).size === 0) {
     fail(`${artifactLabel} is empty: ${rawPath}`);
   }
+  return artifactPath;
 }
 
 function validatePathField(packageDir, label, object, field, artifactLabel) {
-  validatePackageRelativePath(packageDir, `${label}.${field}`, object?.[field], artifactLabel);
+  return validatePackageRelativePath(packageDir, `${label}.${field}`, object?.[field], artifactLabel);
 }
 
 function validateOptionalPathField(packageDir, label, object, field, artifactLabel) {
   if (object[field] === undefined) return;
-  validatePathField(packageDir, label, object, field, artifactLabel);
+  return validatePathField(packageDir, label, object, field, artifactLabel);
 }
 
 function validateOptionalString(value, label) {
@@ -376,6 +378,69 @@ function validateContributionCommands(packageDir, commands = []) {
   return ids;
 }
 
+function validateSettingsSchema(schema, label) {
+  assertPlainObject(schema, label);
+  if (schema.type !== undefined && schema.type !== "object") {
+    fail(`${label}.type must be "object"`);
+  }
+  let properties;
+  if (schema.properties !== undefined) {
+    properties = assertPlainObject(schema.properties, `${label}.properties`);
+  }
+  if (schema.required !== undefined) {
+    assertStringArray(schema.required, `${label}.required`);
+    for (const key of schema.required) {
+      if (properties && !Object.prototype.hasOwnProperty.call(properties, key)) {
+        fail(`${label}.required references unknown property '${key}'`);
+      }
+    }
+  }
+  if (!properties) return;
+  for (const [key, property] of Object.entries(properties)) {
+    validateSettingsSchemaProperty(property, `${label}.properties.${key}`, key);
+  }
+}
+
+function validateSettingsSchemaProperty(property, label, key) {
+  assertPlainObject(property, label);
+  if (typeof property.type !== "string" || !supportedSettingSchemaTypes.has(property.type)) {
+    fail(`${label}.type must be one of ${Array.from(supportedSettingSchemaTypes).join(", ")}`);
+  }
+  if (property["x-bakingrl-secret"] !== undefined && typeof property["x-bakingrl-secret"] !== "boolean") {
+    fail(`${label}.x-bakingrl-secret must be a boolean`);
+  }
+  if (
+    property["x-bakingrl-restart-required"] !== undefined &&
+    typeof property["x-bakingrl-restart-required"] !== "boolean"
+  ) {
+    fail(`${label}.x-bakingrl-restart-required must be a boolean`);
+  }
+  if (property["x-bakingrl-secret"] === true) {
+    if (property.type !== "string") {
+      fail(`${label}.type must be "string" for secret setting '${key}'`);
+    }
+    if (Object.prototype.hasOwnProperty.call(property, "default")) {
+      fail(`${label}.default is not allowed for secret setting '${key}'`);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(property, "default")) {
+    validateSettingsSchemaDefault(property.default, property.type, `${label}.default`, key);
+  }
+}
+
+function validateSettingsSchemaDefault(value, type, label, key) {
+  const valid =
+    (type === "string" && typeof value === "string") ||
+    (type === "number" && typeof value === "number") ||
+    (type === "integer" && Number.isInteger(value)) ||
+    (type === "boolean" && typeof value === "boolean") ||
+    (type === "array" && Array.isArray(value)) ||
+    (type === "object" && value !== null && typeof value === "object" && !Array.isArray(value));
+  if (!valid) {
+    fail(`${label} must match schema type '${type}' for setting '${key}'`);
+  }
+}
+
 function validateContributionServices(packageDir, services = [], sidecarIds) {
   if (!Array.isArray(services)) {
     fail("manifest.contributes.services must be an array");
@@ -423,7 +488,8 @@ function validateContributesSettings(packageDir, contributes, webviewsById) {
     }
   }
   if (Object.prototype.hasOwnProperty.call(settings, "schema")) {
-    validateOptionalPathField(packageDir, "manifest.contributes.settings", settings, "schema", "Settings schema");
+    const schemaPath = validateOptionalPathField(packageDir, "manifest.contributes.settings", settings, "schema", "Settings schema");
+    validateSettingsSchema(readJson(schemaPath), "manifest.contributes.settings.schema");
   }
   if (Object.prototype.hasOwnProperty.call(settings, "ui")) {
     if (typeof settings.ui !== "string") {

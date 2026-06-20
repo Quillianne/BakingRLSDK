@@ -69,6 +69,12 @@ function writeGeneratedEntry(packageDir, relativePath) {
   writeFileSync(path, "export default {};\n");
 }
 
+function writeJsonEntry(packageDir, relativePath, value) {
+  const path = join(packageDir, relativePath);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
 function validateGeneratedPackage(packageDir) {
   execFileSync(process.execPath, [join(packageDir, "scripts", "bakingrl-plugin.mjs"), "validate", packageDir], {
     encoding: "utf8",
@@ -343,6 +349,78 @@ test("validator accepts settings UI backed by a settings webview", () => {
   }), (dir) => {
     writeGeneratedEntry(dir, "dist/webviews/settings.js");
   });
+});
+
+test("validator accepts a typed settings schema with host-owned secrets", () => {
+  validatePackage(baseManifest({
+    contributes: {
+      settings: {
+        schema: "schemas/settings.schema.json"
+      }
+    }
+  }), (dir) => {
+    writeJsonEntry(dir, "schemas/settings.schema.json", {
+      type: "object",
+      required: ["apiKey"],
+      properties: {
+        enabled: {
+          type: "boolean",
+          default: true
+        },
+        retryCount: {
+          type: "integer",
+          default: 3
+        },
+        apiKey: {
+          type: "string",
+          "x-bakingrl-secret": true
+        }
+      }
+    });
+  });
+});
+
+test("validator rejects settings schema defaults with the wrong type", () => {
+  const output = validatePackageFailure(baseManifest({
+    contributes: {
+      settings: {
+        schema: "schemas/settings.schema.json"
+      }
+    }
+  }), (dir) => {
+    writeJsonEntry(dir, "schemas/settings.schema.json", {
+      type: "object",
+      properties: {
+        enabled: {
+          type: "boolean",
+          default: "yes"
+        }
+      }
+    });
+  });
+  assert.match(output, /default must match schema type 'boolean'/);
+});
+
+test("validator rejects secret settings with defaults", () => {
+  const output = validatePackageFailure(baseManifest({
+    contributes: {
+      settings: {
+        schema: "schemas/settings.schema.json"
+      }
+    }
+  }), (dir) => {
+    writeJsonEntry(dir, "schemas/settings.schema.json", {
+      type: "object",
+      properties: {
+        apiKey: {
+          type: "string",
+          "x-bakingrl-secret": true,
+          default: "inline-secret"
+        }
+      }
+    });
+  });
+  assert.match(output, /default is not allowed for secret setting 'apiKey'/);
 });
 
 test("validator rejects settings UI without a settings webview", () => {

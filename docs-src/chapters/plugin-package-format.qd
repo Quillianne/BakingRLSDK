@@ -283,6 +283,9 @@ When `healthCheck` is declared, `intervalMs` must be at least `500` and
 
 `contributes.settings` points to a JSON schema for host-owned settings.
 Non-sensitive values are exposed through `context.settings`.
+Each setting property must declare one supported single type: `string`,
+`number`, `integer`, `boolean`, `array`, or `object`. Defaults must match the
+declared type.
 
 `contributes.settings.ui` can reference a `contributes.webviews` id when that
 webview declares `kind: "settings"`. The host opens it as the package
