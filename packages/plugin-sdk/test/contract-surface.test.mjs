@@ -4,14 +4,41 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  RL_TELEMETRY_EVENT_NAMES,
+  RL_TELEMETRY_FRAME_TEMPLATES,
   RUNTIME_API_VERSION,
   SDK_VERSION,
   createExtensionTarget,
   createResourceRef,
+  isBakingRLEvent,
+  mockRocketLeagueEvent,
+  telemetryFrameTemplate,
   parseExtensionTarget
 } from "../dist/index.js";
 
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const expectedTelemetryEventNames = [
+  "UpdateState",
+  "BallHit",
+  "ClockUpdatedSeconds",
+  "CountdownBegin",
+  "CrossbarHit",
+  "GoalReplayEnd",
+  "GoalReplayStart",
+  "GoalReplayWillEnd",
+  "GoalScored",
+  "MatchCreated",
+  "MatchInitialized",
+  "MatchDestroyed",
+  "MatchEnded",
+  "MatchPaused",
+  "MatchUnpaused",
+  "PodiumStart",
+  "ReplayCreated",
+  "ReplayWillEnd",
+  "RoundStarted",
+  "StatfeedEvent"
+];
 
 test("exports SDK and runtime API contract constants", () => {
   const packageJson = JSON.parse(readFileSync(resolve(packageDir, "package.json"), "utf8"));
@@ -30,6 +57,31 @@ test("exports manifest V4 author-facing declarations", () => {
   assert.match(declarations, /export type PluginManifestV4 = \{/);
   assert.match(declarations, /schemaVersion: "bakingrl\.plugin\/4";/);
   assert.match(declarations, /bakingrlApi: BakingRLCompatibleApiVersion;/);
+});
+
+test("exports stable Rocket League telemetry templates and guards", () => {
+  assert.deepEqual(RL_TELEMETRY_EVENT_NAMES, expectedTelemetryEventNames);
+
+  for (const eventName of expectedTelemetryEventNames) {
+    const template = RL_TELEMETRY_FRAME_TEMPLATES[eventName];
+    assert.equal(template.Event, eventName);
+    assert.ok(isBakingRLEvent(template, eventName));
+
+    const cloned = telemetryFrameTemplate(eventName);
+    assert.notEqual(cloned, template);
+    assert.notEqual(cloned.Data, template.Data);
+
+    cloned.Data.__testMutation = true;
+    assert.equal(RL_TELEMETRY_FRAME_TEMPLATES[eventName].Data.__testMutation, undefined);
+
+    const mock = mockRocketLeagueEvent(eventName, { MatchGuid: `mock-${eventName}` });
+    assert.equal(mock.Event, eventName);
+    assert.equal(mock.Data.MatchGuid, `mock-${eventName}`);
+  }
+
+  assert.equal(isBakingRLEvent(null), false);
+  assert.equal(isBakingRLEvent({ Event: "UpdateState" }, "UpdateState"), false);
+  assert.equal(isBakingRLEvent({ Event: "GoalScored", Data: {} }, "UpdateState"), false);
 });
 
 test("builds and parses extension point targets", () => {
