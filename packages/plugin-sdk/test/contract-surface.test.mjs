@@ -62,6 +62,7 @@ test("exports manifest V4 author-facing declarations", () => {
 test("exports host-mediated webview context declarations", () => {
   const declarations = readFileSync(resolve(packageDir, "dist", "index.d.ts"), "utf8");
 
+  assert.match(declarations, /export type AssetResolver = \{[\s\S]*url\(ref: string\): string \| Promise<string>;/);
   assert.match(declarations, /export type WebviewPackageInfo = \{/);
   assert.match(declarations, /export type WebviewRuntimeInfo = \{/);
   assert.match(declarations, /export type WebviewItemDescriptor = \{/);

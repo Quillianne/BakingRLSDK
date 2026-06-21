@@ -177,8 +177,8 @@ injects into package windows when available:
 
 - `context.services?.call(...)` calls declared services through the same
   dependency and method checks as extension hosts.
-- `context.assets?.url(ref)` builds a package-local asset URL for packaged
-  browser assets.
+- `await context.assets?.url(ref)` builds a package-local asset URL for
+  packaged browser assets.
 - `context.registry?.get(key)` reads registry state allowed for the webview's
   package scope.
 - `context.diagnostics`, `context.telemetry`, and `context.secrets` expose

@@ -53,7 +53,7 @@ const asset = await bridge.request<{ url: string }>("bakingrl:asset-url", {
 ```
 
 Host-opened webviews also receive optional typed helpers such as
-`context.services?.call(...)`, `context.assets?.url(...)`,
+`context.services?.call(...)`, `await context.assets?.url(...)`,
 `context.registry?.get(...)`, `context.diagnostics`, and
 `context.secrets?.configured(...)` when BakingRL mounts them.
 

@@ -134,7 +134,7 @@ export type ServiceCaller = {
 };
 
 export type AssetResolver = {
-  url(ref: string): string;
+  url(ref: string): string | Promise<string>;
 };
 
 export type SettingsReader = {
