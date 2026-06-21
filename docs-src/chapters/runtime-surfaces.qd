@@ -137,8 +137,10 @@ resources, and metadata:
 The host owns graph resolution, activation blocking, diagnostics, and removal
 of contributions when a package is disabled. Plugin code discovers the resolved
 graph through `context.plugins.list()`, `context.extensions.points()`, and
-`context.extensions.contributions()`. A contribution targeting its own package
-may reference a local extension point directly. A contribution targeting
+`context.extensions.contributions()`. `context.plugins.list()` includes active
+packages, declared runtime metadata, and contribution metadata with only public
+resources visible across package boundaries. A contribution targeting its own
+package may reference a local extension point directly. A contribution targeting
 another package must use `target: "<packageId>/<extensionPointId>"` and declare
 a matching top-level dependency on `<packageId>`.
 

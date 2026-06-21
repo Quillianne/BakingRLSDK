@@ -308,6 +308,16 @@ export type PluginDescriptor = {
   enabled: boolean;
   active: boolean;
   dependencies: PluginDependency[];
+  runtime?: RuntimeDeclaration | null;
+  contributes: PluginGraphContributes;
+};
+
+export type PluginGraphResource = ContributionResource & {
+  public: boolean;
+};
+
+export type PluginGraphContributes = Omit<PluginManifestV4Contributes, "resources"> & {
+  resources: PluginGraphResource[];
 };
 
 export type ExtensionPluginController = {

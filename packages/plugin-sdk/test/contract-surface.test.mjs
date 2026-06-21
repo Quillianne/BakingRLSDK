@@ -57,6 +57,10 @@ test("exports manifest V4 author-facing declarations", () => {
   assert.match(declarations, /export type PluginManifestV4 = \{/);
   assert.match(declarations, /schemaVersion: "bakingrl\.plugin\/4";/);
   assert.match(declarations, /bakingrlApi: BakingRLCompatibleApiVersion;/);
+  assert.match(declarations, /export type PluginGraphResource = ContributionResource & \{/);
+  assert.match(declarations, /public: boolean;/);
+  assert.match(declarations, /export type PluginGraphContributes = Omit<PluginManifestV4Contributes, "resources"> & \{/);
+  assert.match(declarations, /contributes: PluginGraphContributes;/);
 });
 
 test("exports host-mediated webview context declarations", () => {

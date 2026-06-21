@@ -112,6 +112,9 @@ const contributions = await context.extensions.contributions(
 `createExtensionTarget(packageId, extensionPointId)` formats a target string for
 manifest and runtime use. `context.extensions.contributions(...)` only returns
 contributions that the host considers usable for the current package graph.
+`context.plugins.list()` returns the active package graph with runtime and
+contribution metadata; resources from other packages are limited to public
+resources, while the caller can still see its own private resources.
 External contribution targets require a matching top-level dependency; self
 targets only need the local extension point.
 
