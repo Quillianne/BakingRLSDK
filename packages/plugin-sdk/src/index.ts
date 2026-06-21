@@ -76,7 +76,7 @@ export type ConfigurationSecretState = {
 export type ConfigurationState = {
   packageId: string;
   title: string;
-  hasCustomPage: boolean;
+  hasSettingsWebview: boolean;
   schema: unknown;
   values: Record<string, unknown>;
   secrets: ConfigurationSecretState[];

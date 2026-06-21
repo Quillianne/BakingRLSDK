@@ -67,6 +67,8 @@ test("exports host-mediated webview context declarations", () => {
   const declarations = readFileSync(resolve(packageDir, "dist", "index.d.ts"), "utf8");
 
   assert.match(declarations, /export type AssetResolver = \{[\s\S]*url\(ref: string\): string \| Promise<string>;/);
+  assert.match(declarations, /export type ConfigurationState = \{[\s\S]*hasSettingsWebview: boolean;[\s\S]*secrets: ConfigurationSecretState\[\];/);
+  assert.doesNotMatch(declarations, /hasCustomPage/);
   assert.match(declarations, /export type WebviewPackageInfo = \{/);
   assert.match(declarations, /export type WebviewRuntimeInfo = \{/);
   assert.match(declarations, /export type WebviewItemDescriptor = \{/);
