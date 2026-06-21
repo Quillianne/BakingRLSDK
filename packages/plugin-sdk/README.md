@@ -52,6 +52,11 @@ const asset = await bridge.request<{ url: string }>("bakingrl:asset-url", {
 });
 ```
 
+Host-opened webviews also receive optional typed helpers such as
+`context.services?.call(...)`, `context.assets?.url(...)`,
+`context.registry?.get(...)`, `context.diagnostics`, and
+`context.secrets?.configured(...)` when BakingRL mounts them.
+
 This SDK targets BakingRL trusted plugin package schema `bakingrl.plugin/4`,
 SDK version `2.2.0`, and `bakingrlApi: "2.2.0"` for the current V4 runtime
 contract. Compatible packages target `2.2.x`; manifests outside `2.2.x`

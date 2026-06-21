@@ -172,6 +172,23 @@ the shared bus for subscribers. The event name must be under
 `plugin.<package-id>.*`. It does not replace the host-owned Rocket League
 snapshot returned by `snapshot()` or `getSnapshot()`.
 
+The webview context also mirrors the host-mediated helpers that BakingRL
+injects into package windows when available:
+
+- `context.services?.call(...)` calls declared services through the same
+  dependency and method checks as extension hosts.
+- `context.assets?.url(ref)` builds a package-local asset URL for packaged
+  browser assets.
+- `context.registry?.get(key)` reads registry state allowed for the webview's
+  package scope.
+- `context.diagnostics`, `context.telemetry`, and `context.secrets` expose
+  scoped logging, plugin-owned telemetry events, and secret configured-state
+  checks.
+
+These fields are optional in the SDK so tests and custom containers can provide
+smaller harnesses. Production webviews should still treat host input, registry
+values, service output, and settings as untrusted data.
+
 ## Browser Bridge
 
 Browser entries can use the SDK bridge when they need structured communication

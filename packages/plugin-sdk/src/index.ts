@@ -236,13 +236,62 @@ export type WebviewSettingsController = {
   subscribe(callback: (settings: Record<string, unknown>) => void | Promise<void>): CleanupFn;
 };
 
+export type WebviewPackageInfo = {
+  id: string;
+  name: string;
+  enabled: boolean;
+};
+
+export type WebviewRuntimeInfo = {
+  packageId: string;
+  api: RuntimeApiVersion | string;
+};
+
+export type WebviewItemDescriptor = {
+  id: string;
+  package_id: string;
+  export_name: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z_index: number;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+  settings: Record<string, unknown>;
+};
+
+export type WebviewStateController = {
+  get<TValue = unknown>(key: string): Promise<TValue | null>;
+  set?<TValue = unknown>(key: string, value: TValue): Promise<void>;
+};
+
+export type WebviewSecretReader = {
+  get?(key: string): Promise<string | undefined>;
+  configured(key: string): Promise<boolean>;
+};
+
 export type WebviewContext = {
   root: HTMLElement;
   packageId: string;
   webviewId: string;
+  package?: WebviewPackageInfo;
+  runtime?: WebviewRuntimeInfo;
+  item?: WebviewItemDescriptor;
   settings: WebviewSettingsController;
   configuration?: ConfigurationContext;
   telemetryHub: TelemetryHub;
+  bus?: TelemetryHub;
+  registry?: ReadonlyRegistry;
+  state?: WebviewStateController;
+  services?: ServiceCaller;
+  assets?: AssetResolver;
+  diagnostics?: ExtensionDiagnostics;
+  telemetry?: ExtensionTelemetry;
+  secrets?: WebviewSecretReader;
+  setActive?(active: boolean): void | Promise<void>;
   dimensions: {
     width: number;
     height: number;

@@ -59,6 +59,17 @@ test("exports manifest V4 author-facing declarations", () => {
   assert.match(declarations, /bakingrlApi: BakingRLCompatibleApiVersion;/);
 });
 
+test("exports host-mediated webview context declarations", () => {
+  const declarations = readFileSync(resolve(packageDir, "dist", "index.d.ts"), "utf8");
+
+  assert.match(declarations, /export type WebviewPackageInfo = \{/);
+  assert.match(declarations, /export type WebviewRuntimeInfo = \{/);
+  assert.match(declarations, /export type WebviewItemDescriptor = \{/);
+  assert.match(declarations, /export type WebviewStateController = \{/);
+  assert.match(declarations, /export type WebviewSecretReader = \{/);
+  assert.match(declarations, /export type WebviewContext = \{[\s\S]*package\?: WebviewPackageInfo;[\s\S]*runtime\?: WebviewRuntimeInfo;[\s\S]*services\?: ServiceCaller;[\s\S]*assets\?: AssetResolver;[\s\S]*diagnostics\?: ExtensionDiagnostics;[\s\S]*secrets\?: WebviewSecretReader;[\s\S]*setActive\?\(active: boolean\): void \| Promise<void>;/);
+});
+
 test("exports stable Rocket League telemetry templates and guards", () => {
   assert.deepEqual(RL_TELEMETRY_EVENT_NAMES, expectedTelemetryEventNames);
 
