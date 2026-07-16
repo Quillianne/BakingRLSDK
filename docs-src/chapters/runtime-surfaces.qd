@@ -12,7 +12,9 @@ declarative metadata belongs in `bakingrl.plugin.json`.
 Every current package is described by `bakingrl.plugin.json` with:
 
 - `schemaVersion: "bakingrl.plugin/4"`;
-- `bakingrlApi: "2.2.0"` for new packages;
+- `bakingrlApi: "2.3.0"` for new packages;
+- structured `permissions` for mediated bus, registry, network, and storage
+  access;
 - top-level `dependencies` for package-to-package relationships;
 - `runtime.node.entry` for package JS activation code;
 - `runtime.sidecars` as first-class package-local native helpers;
@@ -20,11 +22,9 @@ Every current package is described by `bakingrl.plugin.json` with:
   extension points, contributions, resources, and other supported host
   surfaces.
 
-`contributes` is the only package discovery surface for current packages.
-
-V4 does not publish a manifest-level access grant contract. The host remains
-the runtime boundary for mediated APIs, and package code is checked through host
-policy on each API call path.
+`contributes` is the package discovery surface. Runtime API 2.3 permissions are
+checked on host-mediated bus, registry, and storage calls. Network declarations
+remain consent metadata because direct Node and sidecar access is not sandboxed.
 
 ## Extension Host
 
@@ -172,7 +172,7 @@ Dispose subscriptions from `deactivate()` or by pushing cleanups into
 Browser UI that the host opens is declared through `contributes.webviews`:
 
 - `webviews`: package-owned browser entries opened by the host as tools,
-  settings views, or panels.
+  settings views, panels, or desktop surfaces.
 
 Browser code runs inside a host-opened container and communicates with the host
 through mediated context APIs, the SDK bridge, and the event bus. It should not
@@ -187,12 +187,19 @@ windows, or a declared settings webview. Webview module loading starts from the
 declared entry and only follows relative JavaScript imports that remain inside
 that entry's built bundle tree.
 
-Runtime API 2.2 does not use `contributes.visuals`, host-owned package pages,
+Runtime API 2.3 does not use `contributes.visuals`, host-owned package pages,
 host-owned overlay rendering, or `externalSurfaces`. Domain products such as an
 overlay editor, OBS workflow, scoreboard renderer, or remote browser gateway
 should be implemented by a platform plugin. That platform plugin can expose an
 extension point and consume other packages' `contributions`, `resources`,
 `services`, and `metadata`.
+
+A webview with `kind: "surface"` is a singleton desktop webview for its package
+and webview id. Its manifest fixes transparency, always-on-top, click-through,
+and resizable capabilities. For that kind, `context.webviews.open(id, options)`
+can change only `position`, `size`, and `screen`, and returns a `SurfaceState`
+with logical bounds, screen, scale factor, and visibility. Ordinary tool and
+settings webviews are opened without options and return `{ opened: true }`.
 
 ## Resources
 
@@ -236,13 +243,27 @@ const value = await context.registry.get("plugin.com.example.package.state");
 Registry writes must stay inside the caller package namespace. Reading another
 package namespace requires a manifest dependency on that package.
 
-Use storage for package-owned persistent text files:
+Use private storage for package-owned persistent JSON and text files:
 
 ```ts
-await context.storage.writeText("plugin://self/history.json", JSON.stringify(history));
+await context.storage.writeJson("history/latest.json", history);
+const previous = await context.storage.readJson("history/latest.json");
+const files = await context.storage.list("history/");
+const { usedBytes, quotaBytes } = await context.storage.usage();
 ```
 
-Storage is not for secrets.
+Paths are relative and `/`-separated. URI prefixes, absolute paths, `..`,
+backslashes, and symlink traversal are invalid. `list` is recursive, sorted,
+and returns files only; `delete` reports whether a file existed. The mediated
+quota is 256 MiB per package. Storage is not for secrets, and this SDK performs
+no automatic legacy or inter-ID migration.
+
+## Render Bundles
+
+Layout-oriented plugins can exchange `RenderBundleV1`, identified by
+`bakingrl.render-bundle/1`. A bundle contains layout geometry, contribution
+settings, embedded resources, event and snapshot data sources, and initial JSON
+data. It must not contain filesystem paths or secrets.
 
 ## Settings And Secrets
 

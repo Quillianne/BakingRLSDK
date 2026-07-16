@@ -15,8 +15,9 @@ This documentation is for plugin authors. The desktop host lives in the
 Current packages use:
 
 - manifest schema `bakingrl.plugin/4`;
-- `bakingrlApi: "2.2.0"` for new packages;
-- SDK package version `2.2.0`;
+- `bakingrlApi: "2.3.0"` for new packages;
+- SDK package version `2.3.0`;
+- structured bus, registry, network, and storage permissions;
 - one JavaScript extension host entry per package in `runtime.node`;
 - host-owned settings metadata and host-opened webviews declared through
   `contributes`;
@@ -55,10 +56,10 @@ docs-site/                        Generated documentation output
 
 ## Compatibility
 
-This SDK targets `bakingrl.plugin/4` with `bakingrlApi: "2.2.0"` for new
-packages. The helper CLI accepts compatible package manifests in the
-`2.2.x` runtime API window. Manifests outside `2.2.x` require a different host
-target.
+This SDK targets `bakingrl.plugin/4` with `bakingrlApi: "2.3.0"` for new
+packages. The helper CLI accepts only the `2.3.x` runtime API window, with
+`2.3.0` as the minimum supported version. Runtime API 2.2 packages must be
+migrated before they can be validated or run.
 
 Use [Plugin Package Format](plugin-package-format.qd) for the manifest
 contract, [Runtime Surfaces](runtime-surfaces.qd) for host APIs,

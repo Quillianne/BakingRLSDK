@@ -1,7 +1,8 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "2.2.0";
-export const RUNTIME_API_VERSION = "2.2.0";
+export const SDK_VERSION = "2.3.0";
+export const RUNTIME_API_VERSION = "2.3.0";
+export const MIN_SUPPORTED_RUNTIME_API_VERSION = "2.3.0";
 
 export * from "./telemetry.js";
 
@@ -125,8 +126,13 @@ export type Registry = {
 };
 
 export type PluginStorage = {
-  readText(uri: string): Promise<string>;
-  writeText(uri: string, contents: string): Promise<void>;
+  readText(path: string): Promise<string>;
+  writeText(path: string, contents: string): Promise<void>;
+  readJson<T extends JsonValue = JsonValue>(path: string): Promise<T>;
+  writeJson(path: string, value: JsonValue): Promise<void>;
+  list(prefix?: string): Promise<string[]>;
+  delete(path: string): Promise<boolean>;
+  usage(): Promise<{ usedBytes: number; quotaBytes: number }>;
 };
 
 export type ServiceCaller = {
@@ -224,10 +230,37 @@ export type ExtensionTelemetry = {
   event(name: string, properties?: unknown): Promise<unknown>;
 };
 
+export type WebviewOpenOptions = {
+  position?: [number, number];
+  size?: [number, number];
+  screen?: "primary" | string;
+};
+
+export type SurfaceOpenOptions = WebviewOpenOptions;
+
+export type SurfaceState = {
+  instanceId: string;
+  screen: string;
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  scaleFactor: number;
+  visible: boolean;
+};
+
+export type StandardWebviewState = {
+  opened: true;
+};
+
+export type WebviewOpenState = SurfaceState | StandardWebviewState;
+
 export type ExtensionWebviewController = {
   declared: Record<string, ContributionWebview>;
-  open(id: string, options?: unknown): Promise<unknown>;
-  close(id: string): Promise<unknown>;
+  open(id: string, options?: WebviewOpenOptions): Promise<WebviewOpenState>;
+  close(id: string): Promise<void>;
 };
 
 export type WebviewSettingsController = {
@@ -370,7 +403,6 @@ export type ExtensionContext = {
   id: string;
   packageId: string;
   extensionPath: string;
-  storagePath: string;
   settings: SettingsReader & Record<string, unknown>;
   state: ContextState;
   extension?: {
@@ -462,13 +494,58 @@ export type RuntimeDeclaration = {
 };
 
 export type RuntimeRef = "node" | `sidecar:${string}`;
-export type BakingRLCompatibleApiVersion = `2.2.${number}`;
+export type BakingRLCompatibleApiVersion = `2.3.${number}`;
 export type ExtensionPointTarget = `${string}/${string}`;
 export type ResourceVisibility = "public" | "private";
 
+export type PermissionPattern = string;
+
+export type NetworkEndpoint = {
+  scheme: "http" | "https" | "ws" | "wss";
+  host: string;
+  ports: "*" | number[];
+  pathPrefixes?: string[];
+};
+
+export type HttpNetworkEndpoint = NetworkEndpoint & {
+  scheme: "http" | "https";
+};
+
+export type WebSocketNetworkEndpoint = NetworkEndpoint & {
+  scheme: "ws" | "wss";
+};
+
+export type ListenEndpoint = {
+  transport: "http" | "https" | "ws" | "wss" | "tcp";
+  host: string;
+  ports: "*" | number[];
+};
+
+export type PluginPermissions = {
+  bus: {
+    read: PermissionPattern[];
+    publish: PermissionPattern[];
+  };
+  registry: {
+    read: PermissionPattern[];
+    write: PermissionPattern[];
+  };
+  network: {
+    http: HttpNetworkEndpoint[];
+    websocket: WebSocketNetworkEndpoint[];
+    listen: ListenEndpoint[];
+  };
+  storage: {
+    read: PermissionPattern[];
+    write: PermissionPattern[];
+  };
+};
+
+export type ManifestPermissions = PluginPermissions;
+
 export type PluginDependency = {
   packageId: string;
-  version?: string;
+  version: string;
   optional?: boolean;
 };
 
@@ -529,13 +606,31 @@ export type ContributionResource = {
   metadata?: Record<string, unknown>;
 };
 
-export type ContributionWebview = {
+export type StandardContributionWebview = {
   id: string;
   entry: string;
   title?: string;
   kind?: "tool" | "settings" | "panel";
   defaultSize?: [number, number];
 };
+
+export type SurfaceDeclaration = {
+  id: string;
+  entry: string;
+  title?: string;
+  kind: "surface";
+  defaultSize: [number, number];
+  surface: {
+    defaultPosition?: [number, number];
+    defaultScreen?: "primary" | string;
+    transparent?: boolean;
+    alwaysOnTop?: boolean;
+    clickThrough?: boolean;
+    resizable?: boolean;
+  };
+};
+
+export type ContributionWebview = StandardContributionWebview | SurfaceDeclaration;
 
 export type PluginManifestV4Contributes = {
   settings?: ContributionSettings;
@@ -552,11 +647,115 @@ export type PluginManifestV4 = {
   id: string;
   name: string;
   version: string;
+  author?: string;
   bakingrlApi: BakingRLCompatibleApiVersion;
+  permissions?: PluginPermissions;
   dependencies?: PluginDependency[];
   runtime?: RuntimeDeclaration;
   contributes?: PluginManifestV4Contributes;
 };
+
+export type RenderBundleV1 = {
+  schema: "bakingrl.render-bundle/1";
+  layout: {
+    id: string;
+    revision: number;
+    width: number;
+    height: number;
+    items: Array<{
+      id: string;
+      contribution: string;
+      bounds: { x: number; y: number; width: number; height: number };
+      zIndex: number;
+      opacity: number;
+      visible: boolean;
+      settings: Record<string, JsonValue>;
+    }>;
+  };
+  resources: Array<{
+    ref: string;
+    mediaType: string;
+    encoding: "utf8" | "base64";
+    contents: string;
+    sha256: string;
+  }>;
+  dataSources: {
+    events: string[];
+    snapshots: Array<{
+      key: string;
+      service: string;
+      method: string;
+      input?: JsonValue;
+    }>;
+  };
+  initialData: Record<string, JsonValue>;
+};
+
+export type PluginListingScreenshot = {
+  url: string;
+  alt?: string;
+  caption?: string;
+};
+
+export type PluginAuthorListingV1 = {
+  schema: "bakingrl.plugin-listing/1";
+  packageId: string;
+  displayName: string;
+  shortDescription: string;
+  longDescription: string;
+  tags: string[];
+  repo: string;
+  iconUrl?: string | null;
+  bannerUrl?: string | null;
+  screenshots: PluginListingScreenshot[];
+  links?: Record<string, string>;
+};
+
+export type PluginListingV1 = PluginAuthorListingV1;
+export type AuthorListingV1 = PluginAuthorListingV1;
+
+export type MarketplaceSubmissionArtifact = {
+  platform: "any" | RuntimeSidecarPlatform;
+  bundleUrl: string;
+  bundleSha256: string;
+  signaturePublicKey: string;
+};
+
+export type MarketplaceSubmissionDependency = {
+  packageId: string;
+  version: string;
+  optional: boolean;
+};
+
+export type MarketplaceSubmissionRuntime = {
+  node: boolean;
+  sidecars: Array<{
+    id: string;
+    platforms: Array<"any" | RuntimeSidecarPlatform>;
+  }>;
+  webviews: Array<{
+    id: string;
+    kind: "tool" | "settings" | "panel" | "surface";
+  }>;
+};
+
+export type MarketplaceSubmissionV1 = {
+  schema: "bakingrl.marketplace-submission/1";
+  packageId: string;
+  developerId: string;
+  version: string;
+  runtimeApi: BakingRLCompatibleApiVersion;
+  repo: string;
+  listingUrl: string;
+  listing: PluginAuthorListingV1;
+  dependencies: MarketplaceSubmissionDependency[];
+  runtime: MarketplaceSubmissionRuntime;
+  artifacts: MarketplaceSubmissionArtifact[];
+  permissions: PluginPermissions;
+  generatedAt: string;
+};
+
+export type AuthorSubmissionV1 = MarketplaceSubmissionV1;
 
 export type WebviewMessage<TType extends string = string, TPayload = unknown> = {
   source?: string;

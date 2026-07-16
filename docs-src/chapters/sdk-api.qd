@@ -5,7 +5,7 @@
 
 The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v4 plugin
 contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/4`,
-SDK `2.2.0`, and `bakingrlApi: "2.2.0"` for new packages.
+SDK `2.3.0`, and `bakingrlApi: "2.3.0"` for new packages.
 
 The SDK is an authoring contract. Runtime behavior is provided by the host:
 package loading, extension host supervision, bridge calls, service routing,
@@ -18,6 +18,7 @@ resources, telemetry, and plugin graph resolution.
 import {
   SDK_VERSION,
   RUNTIME_API_VERSION,
+  MIN_SUPPORTED_RUNTIME_API_VERSION,
   defineExtension,
   defineWebview,
   createCleanup,
@@ -26,6 +27,9 @@ import {
   createResourceRef,
   type ExtensionContext,
   type PluginManifestV4,
+  type PluginPermissions,
+  type RenderBundleV1,
+  type SurfaceState,
   type WebviewContext,
   type WebviewBridge
 } from "@bakingrl/plugin-sdk";
@@ -76,7 +80,8 @@ export const deactivate = extension.deactivate;
 - `services.register`, `services.registerService`, and `services.call`;
 - `bus.subscribe` and `bus.emit`;
 - `registry.get`, `registry.set`, and `registry.entries`;
-- `storage.readText` and `storage.writeText`;
+- `storage.readText`, `storage.writeText`, `storage.readJson`,
+  `storage.writeJson`, `storage.list`, `storage.delete`, and `storage.usage`;
 - `secrets.get` and `secrets.configured`;
 - `webviews.open`, `webviews.close`, and declared webview metadata;
 - `plugins.list`;
@@ -86,6 +91,11 @@ export const deactivate = extension.deactivate;
 - `sidecars.start`, `sidecars.stop`, `sidecars.restart`, and `sidecars.call`;
 - `telemetry.event`;
 - `diagnostics` and `logger`.
+
+Private storage paths are relative and `/`-separated; `plugin://self`, absolute
+paths, `..`, backslashes, and symlink traversal are invalid. `usage()` reports
+the current bytes and the 256 MiB mediated quota. The SDK does not perform
+automatic storage migration.
 
 Services are registered from `activate(context)`. The manifest only declares
 service names, methods, schemas, and optional sidecar links so the host can
@@ -139,6 +149,20 @@ export default defineWebview({
 Only webviews declared with `kind: "settings"` can save package settings.
 Other package webviews can read and subscribe to non-secret settings, but write
 flows stay on configuration surfaces.
+
+`context.webviews.open(id)` opens an ordinary tool or settings webview and
+resolves to `{ opened: true }`. Webviews declared with `kind: "surface"` are
+singleton desktop surfaces. Their manifest fixes transparency, always-on-top,
+click-through, and resizable capabilities. For surfaces, opening accepts only
+optional `position`, `size`, and `screen` values and resolves to `SurfaceState`:
+
+```ts
+const state = await context.webviews.open("game-overlay", {
+  position: [0, 0],
+  size: [1280, 720],
+  screen: "primary"
+});
+```
 The host resolves the module from the manifest-declared webview entry, then
 allows only relative JavaScript imports that stay inside the same declared
 bundle tree. A browser entry should not depend on local package paths, global
@@ -255,12 +279,26 @@ const result = await context.sidecars.call("nativeHelper", "ping", {
 
 The current protocol is JSON-RPC 2.0 over newline-delimited stdio.
 
+## Render Bundle And Publication Types
+
+`RenderBundleV1` is the stable `bakingrl.render-bundle/1` layout exchange
+contract. It contains JSON-compatible layout items, embedded resources, data
+sources, and initial data, without filesystem paths or secrets.
+
+`PluginAuthorListingV1` describes package-owned marketplace display metadata.
+`MarketplaceSubmissionV1` describes unsigned review input containing the author
+listing, normalized dependencies and runtime declarations, artifact hashes, the
+signing public key, and declared permissions. Marketplace review turns that
+input into a hashed listing snapshot, derives native capabilities, and assigns
+approved key ids and statuses. Neither type defines the signed catalogue.
+
 ## Utilities
 
-`SDK_VERSION` is `2.2.0`.
+`SDK_VERSION` is `2.3.0`.
 
-`RUNTIME_API_VERSION` is `2.2.0`, matching the manifest value
-`bakingrlApi: "2.2.0"` used by new packages.
+`RUNTIME_API_VERSION` and `MIN_SUPPORTED_RUNTIME_API_VERSION` are both `2.3.0`,
+matching the manifest value `bakingrlApi: "2.3.0"` used by new packages. Only
+the `2.3.x` Runtime API window is supported.
 
 `setting(settings, key, fallback)` reads a typed value with a fallback.
 

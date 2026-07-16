@@ -28,11 +28,16 @@ sidecar. Native plugin code must not be loaded into the host binary.
 
 ## Runtime Boundaries
 
-The manifest does not carry an access grant block in V4. Host-managed metadata
-still records what the package contributes and which runtime surfaces it uses.
-The host can reject obvious out-of-scope bus, registry, storage, and sidecar
-access, but access is enforced as host policy rather than as a strict manifest
-sandbox.
+Runtime API 2.3 manifests declare structured permissions for bus, registry,
+network, and storage access. The host enforces these declarations on its
+mediated bus, registry, and storage APIs. Exact patterns and patterns with one
+terminal `*` are supported; matching is case-sensitive.
+
+Permissions are not a strict plugin sandbox. Network permissions are consent
+metadata, and a Node extension or native sidecar can use direct operating
+system and network APIs with the user's rights. The host UI and package
+documentation must not present a reviewed permission declaration, signature,
+or marketplace listing as proof that code is safe.
 
 Package bus publishes and registry writes are constrained to
 `plugin.<package-id>.*`. Registry reads outside the caller namespace require a
@@ -41,6 +46,10 @@ declared dependency on the owner package namespace.
 Dependencies and contributions are declarations, not direct trust grants. The
 host still mediates service calls, resource reads, webview opening, and
 cross-package discovery at runtime.
+
+Storage permission paths use `/`-separated relative paths. Absolute paths,
+`plugin://self/...`, `..`, backslashes, and symlink traversal are invalid.
+There is no automatic legacy storage or inter-package ID migration.
 
 ## Safe Mode
 
@@ -69,6 +78,7 @@ The helper CLI and host inspect package archives for operational safety:
 - package-relative paths only;
 - no `../` path traversal;
 - supported schema and compatible `bakingrlApi`;
+- complete structured permissions and relative storage paths;
 - declared build entries and sidecar commands exist;
 - declared resources, schemas, webviews, and sidecar health checks stay inside
   the package;

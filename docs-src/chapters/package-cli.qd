@@ -32,7 +32,8 @@ Available templates:
   SVG content to another package.
 
 Generated packages declare `schemaVersion: "bakingrl.plugin/4"`, and
-`bakingrlApi: "2.2.0"`.
+`bakingrlApi: "2.3.0"`. They include an explicit empty permission declaration
+and an author-owned `marketplace/listing.json` ready to edit.
 
 ## Validate
 
@@ -43,8 +44,13 @@ bakingrl-plugin validate .
 Validation checks:
 
 - manifest schema, id, name, version, `bakingrlApi` compatibility, runtime,
-  dependencies, contributes, and host-owned settings;
+  permissions, dependencies, contributes, and host-owned settings;
+- exact or single-terminal-wildcard bus, registry, and storage patterns;
+- structured HTTP, WebSocket, and listen endpoints;
+- relative storage paths without URI prefixes, absolute paths, `..`, or
+  backslashes;
 - built JavaScript entries for extension host and declared webviews;
+- complete `surface` webviews with immutable capability declarations;
 - sidecar command paths and `jsonrpc-stdio` declarations;
 - sidecar health-check declarations when present;
 - package-local paths for declared contribution schemas, resources, webviews,
@@ -59,7 +65,7 @@ Current validation accepts `contributes.extensionPoints`,
 `contributes.contributions`, `contributes.resources`, and
 `contributes.webviews`. A contribution targeting another package must declare a
 matching top-level dependency. Runtime API validation accepts manifests in the
-`2.2.x` window and rejects manifests outside that target.
+`2.3.x` window, with `2.3.0` as the minimum, and rejects every other target.
 
 ## Doctor
 
@@ -67,7 +73,7 @@ matching top-level dependency. Runtime API validation accepts manifests in the
 bakingrl-plugin doctor .
 ```
 
-`doctor` prints a JSON summary of `bakingrlApi`, dependencies, sidecars,
+`doctor` prints a JSON summary of `bakingrlApi`, permissions, dependencies, sidecars,
 contribution ids, resources, webviews, and build entries.
 
 ## Inspect
@@ -77,7 +83,19 @@ bakingrl-plugin inspect .
 ```
 
 `inspect` prints the normalized v4 manifest surface used by the host:
-`schemaVersion`, `bakingrlApi`, `runtime`, and `contributes`.
+`schemaVersion`, `bakingrlApi`, `permissions`, `runtime`, and `contributes`.
+
+## Author Listing
+
+Every generated package includes `marketplace/listing.json`. Validate its
+package id, text limits, repository, media URLs, screenshots, and links with:
+
+```sh
+bakingrl-plugin validate-listing .
+```
+
+The listing is display metadata owned by the package author. It is not a trust
+decision and it is not the signed marketplace catalogue.
 
 ## Pack
 
@@ -98,6 +116,25 @@ bakingrl-plugin pack . --sign bakingrl-signing-key.json
 
 Do not commit signing keys, signatures, hashes, bundles, or generated build
 outputs unless a release process explicitly requires them.
+
+## Prepare A Submission
+
+After producing a signed release bundle, emit review input with:
+
+```sh
+bakingrl-plugin prepare-submission . \
+  --developer example \
+  --bundle-url https://github.com/example/package/releases/download/v1.0.0/package.brlp \
+  --listing-url https://raw.githubusercontent.com/example/package/v1.0.0/marketplace/listing.json \
+  --platform windows-x64 \
+  --output submission.json
+```
+
+The `bakingrl.marketplace-submission/1` document records the package version,
+Runtime API, author listing location, artifact hash, signing public key, and
+declared permissions. It deliberately contains no review status, approval, or
+`bakingrl.marketplace/2` catalogue structure; those belong to the marketplace
+repository.
 
 ## Local Install
 

@@ -58,9 +58,9 @@ Host-opened webviews also receive optional typed helpers such as
 `context.secrets?.configured(...)` when BakingRL mounts them.
 
 This SDK targets BakingRL trusted plugin package schema `bakingrl.plugin/4`,
-SDK version `2.2.0`, and `bakingrlApi: "2.2.0"` for the current V4 runtime
-contract. Compatible packages target `2.2.x`; manifests outside `2.2.x`
-require a different host target.
+SDK version `2.3.0`, and `bakingrlApi: "2.3.0"` for the current V4 runtime
+contract. Compatible packages target `2.3.x`, with `2.3.0` as the minimum;
+manifests outside that window are rejected.
 
 See the repository `docs-src/` documentation for the full SDK API, manifest
 format, telemetry types, and security model.

@@ -14,7 +14,13 @@ BakingRL packages are described by `bakingrl.plugin.json`. Current packages use
   "id": "com.example.extension",
   "name": "Example Extension",
   "version": "1.0.0",
-  "bakingrlApi": "2.2.0",
+  "bakingrlApi": "2.3.0",
+  "permissions": {
+    "bus": { "read": [], "publish": [] },
+    "registry": { "read": [], "write": [] },
+    "network": { "http": [], "websocket": [], "listen": [] },
+    "storage": { "read": [], "write": [] }
+  },
   "dependencies": [],
   "runtime": {
     "node": {
@@ -44,10 +50,9 @@ Must be `bakingrl.plugin/4` for current packages.
 
 `bakingrlApi`
 
-Top-level contract version. New packages should declare exact `2.2.0` for the
-current V4 runtime contract. The helper CLI accepts compatible manifests in the
-`2.2.x` runtime API window. Manifests outside `2.2.x` require a different host
-target.
+Top-level contract version. New packages declare exact `2.3.0`. The helper CLI
+accepts only `2.3.x`, with `2.3.0` as the minimum supported version. Runtime
+API 2.2 packages are not accepted.
 
 `id`
 
@@ -76,12 +81,18 @@ package-local helper processes declared with JSON-RPC stdio.
 Declarative package surface used for discovery, descriptors, runtime startup,
 and UI.
 
+`permissions`
+
+Structured bus, registry, network, and private-storage declarations. Bus,
+registry, and storage patterns are exact values or values with one terminal
+`*`. Network entries are structured endpoints rather than URL globs.
+
 `contributes.settings`
 
 Optional package-level schema for settings. This is metadata only; plugin settings
 values are surfaced through host-managed settings and secrets APIs.
 
-Runtime API 2.2 rejects `externalSurfaces`. OBS workflows, remote browser
+Runtime API 2.3 rejects `externalSurfaces`. OBS workflows, remote browser
 gateways, and other domain surfaces should be owned by platform plugins instead
 of the BakingRL host contract.
 
@@ -218,6 +229,21 @@ Resources are package-relative files or directories:
         "title": "Inspector",
         "kind": "panel",
         "defaultSize": [480, 360]
+      },
+      {
+        "id": "game-overlay",
+        "entry": "dist/webviews/game-overlay.js",
+        "title": "Game Overlay",
+        "kind": "surface",
+        "defaultSize": [1280, 720],
+        "surface": {
+          "defaultPosition": [0, 0],
+          "defaultScreen": "primary",
+          "transparent": true,
+          "alwaysOnTop": true,
+          "clickThrough": true,
+          "resizable": true
+        }
       }
     ]
   }
@@ -228,6 +254,49 @@ A resource must declare either `path` or `paths`, never both. `visibility`
 defaults to `private`. Public resources must declare `type`. Private resources
 stay host-mediated; package code should read resources through SDK refs rather
 than assuming filesystem paths.
+
+A `surface` webview requires `defaultSize` and a `surface` capability object.
+Only `position`, `size`, and `screen` can be changed when opening it; its
+transparency, always-on-top, click-through, and resizable capabilities remain
+fixed by the manifest.
+
+## Permissions
+
+```json
+{
+  "permissions": {
+    "bus": {
+      "read": ["UpdateState"],
+      "publish": ["plugin.com.example.scoreboard.*"]
+    },
+    "registry": {
+      "read": [],
+      "write": ["plugin.com.example.scoreboard.*"]
+    },
+    "network": {
+      "http": [
+        {
+          "scheme": "https",
+          "host": "api.example.com",
+          "ports": [443],
+          "pathPrefixes": ["/v1/"]
+        }
+      ],
+      "websocket": [],
+      "listen": []
+    },
+    "storage": {
+      "read": ["state.json", "history/*"],
+      "write": ["state.json", "history/*"]
+    }
+  }
+}
+```
+
+Storage paths use `/`, are relative, and cannot contain URI prefixes,
+backslashes, absolute paths, or `..`. Network declarations describe user
+consent and review scope; direct Node and sidecar networking is not sandboxed
+by them.
 
 ## Bus And Registry Namespaces
 
@@ -244,8 +313,8 @@ plugin.com.example.scoreboard.state
 plugin.com.example.scoreboard.sequence
 ```
 
-Cross-package reads and writes are mediated by host policy; the manifest does
-not declare per-surface access grants.
+Cross-package reads and writes are mediated by host policy and the declared
+bus and registry permission patterns.
 
 ## Sidecars
 

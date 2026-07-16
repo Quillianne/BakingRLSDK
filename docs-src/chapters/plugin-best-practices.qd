@@ -70,7 +70,11 @@ Use package-scoped names:
 
 - bus publish: `plugin.<package-id>.*`;
 - registry keys: `plugin.<package-id>.*`;
-- storage: `plugin://self/*`.
+- storage: relative paths such as `state.json` or `history/*`.
+
+Declare only the mediated permissions the package needs. Network declarations
+communicate consent and review intent; they do not constrain direct Node or
+sidecar networking.
 
 If a package needs to read another package registry namespace, declare a
 dependency on that package and prefer service/resource APIs for richer shared

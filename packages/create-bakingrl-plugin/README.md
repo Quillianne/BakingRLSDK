@@ -36,9 +36,9 @@ Generated packages include `scripts/bakingrl-plugin.mjs`, but the global
 and install V4 plugin packages during development.
 
 New packages declare `bakingrlApi` with the current BakingRL runtime API
-(`2.2.0`). The helper validates the current V4 contract and accepts compatible
-package manifests in the `2.2.x` runtime API window. Manifests outside `2.2.x`
-require a different host target and are rejected by this target validator.
+(`2.3.0`). The helper validates the current V4 contract and accepts only
+package manifests in the `2.3.x` runtime API window, with `2.3.0` as the
+minimum supported version.
 
 Current templates are `extension-plugin`, `native-sidecar-plugin`,
 `platform-plugin`, `contributor-plugin`, and
@@ -47,3 +47,8 @@ Current templates are `extension-plugin`, `native-sidecar-plugin`,
 `contributes.settings.ui` to reference a declared webview with
 `kind: "settings"`. Webviews, extension points, contributions, resources, and
 services are declared through `contributes`.
+
+Every template also includes an author-owned `marketplace/listing.json`.
+`validate-listing` checks that file, while `prepare-submission` emits unsigned
+review input for the marketplace repository. It does not create an approved
+catalogue entry or a signed marketplace index.

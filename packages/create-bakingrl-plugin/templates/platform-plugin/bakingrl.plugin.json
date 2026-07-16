@@ -1,10 +1,16 @@
 {
   "schemaVersion": "bakingrl.plugin/4",
-  "bakingrlApi": "2.2.0",
+  "bakingrlApi": "2.3.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
   "author": "Your Name",
+  "permissions": {
+    "bus": { "read": [], "publish": [] },
+    "registry": { "read": [], "write": [] },
+    "network": { "http": [], "websocket": [], "listen": [] },
+    "storage": { "read": [], "write": [] }
+  },
   "runtime": {
     "node": {
       "entry": "dist/extension/index.js"

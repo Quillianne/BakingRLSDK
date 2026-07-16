@@ -5,7 +5,7 @@
 
 Current BakingRL plugin authoring uses one model: trusted v4 packages with a
 JavaScript extension host, host-opened webviews, host-owned settings metadata,
-and first-class native sidecars. Runtime API `2.2.0` also keeps dependencies,
+and first-class native sidecars. Runtime API `2.3.0` also keeps dependencies,
 extension points, contributions, resources, and declared webviews for plugin
 ecosystem chains.
 

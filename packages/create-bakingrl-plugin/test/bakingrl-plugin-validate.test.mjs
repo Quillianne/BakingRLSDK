@@ -84,9 +84,20 @@ function validateGeneratedPackage(packageDir) {
 
 function assertGeneratedV4Manifest(packageDir, expectedId) {
   const manifest = readJson(join(packageDir, "bakingrl.plugin.json"));
+  const packageJson = readJson(join(packageDir, "package.json"));
+  const listing = readJson(join(packageDir, "marketplace", "listing.json"));
   assert.equal(manifest.schemaVersion, "bakingrl.plugin/4");
-  assert.equal(manifest.bakingrlApi, "2.2.0");
+  assert.equal(manifest.bakingrlApi, "2.3.0");
   assert.equal(manifest.id, expectedId);
+  assert.deepEqual(manifest.permissions, emptyPermissions());
+  assert.equal(listing.schema, "bakingrl.plugin-listing/1");
+  assert.equal(listing.packageId, expectedId);
+  assert.equal(packageJson.scripts["validate:listing"], "node scripts/bakingrl-plugin.mjs validate-listing");
+  assert.equal(packageJson.scripts.submission, "node scripts/bakingrl-plugin.mjs prepare-submission");
+  execFileSync(process.execPath, [join(packageDir, "scripts", "bakingrl-plugin.mjs"), "validate-listing", packageDir], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
   assert.equal(manifest.compatibility, undefined);
   assert.equal(manifest.externalSurfaces, undefined);
   for (const group of legacyContributes) {
@@ -106,11 +117,20 @@ function expectedIdForScaffold(name) {
 function baseManifest(overrides = {}) {
   return {
     schemaVersion: "bakingrl.plugin/4",
-    bakingrlApi: "2.2.0",
+    bakingrlApi: "2.3.0",
     id: "com.example.package",
     name: "Example Package",
     version: "1.0.0",
     ...overrides
+  };
+}
+
+function emptyPermissions() {
+  return {
+    bus: { read: [], publish: [] },
+    registry: { read: [], write: [] },
+    network: { http: [], websocket: [], listen: [] },
+    storage: { read: [], write: [] }
   };
 }
 
@@ -137,21 +157,172 @@ function writeResource(packageDir, relativePath = "resources/preset.json") {
   writeGeneratedEntry(packageDir, relativePath);
 }
 
+function writeAuthorListing(packageDir, packageId = "com.example.package") {
+  writeJsonEntry(packageDir, "marketplace/listing.json", {
+    schema: "bakingrl.plugin-listing/1",
+    packageId,
+    displayName: "Example Package",
+    shortDescription: "A compact example package.",
+    longDescription: "An author-owned package listing used to exercise the SDK publication workflow.",
+    tags: ["example"],
+    repo: "https://github.com/example/package",
+    iconUrl: null,
+    bannerUrl: null,
+    screenshots: [],
+    links: {
+      docs: "https://github.com/example/package#readme",
+      support: "https://github.com/example/package/issues"
+    }
+  });
+}
+
 test("validator requires manifest schema V4", () => {
   const output = validatePackageFailure(baseManifest({ schemaVersion: "bakingrl.plugin/3" }));
   assert.match(output, /schemaVersion must be bakingrl\.plugin\/4/);
 });
 
-test("validator accepts runtime API 2.2.x manifests", () => {
-  validatePackage(baseManifest({ bakingrlApi: "2.2.0" }));
-  validatePackage(baseManifest({ bakingrlApi: "2.2.99" }));
+test("validator accepts runtime API 2.3.x manifests", () => {
+  validatePackage(baseManifest({ bakingrlApi: "2.3.0" }));
+  validatePackage(baseManifest({ bakingrlApi: "2.3.99" }));
 });
 
-test("validator rejects runtime APIs outside 2.2.x", () => {
-  const legacyOutput = validatePackageFailure(baseManifest({ bakingrlApi: "2.1.99" }));
-  assert.match(legacyOutput, /target host runtime API 2\.2\.x/);
-  const output = validatePackageFailure(baseManifest({ bakingrlApi: "2.3.0" }));
-  assert.match(output, /target host runtime API 2\.2\.x/);
+test("validator rejects every runtime API outside 2.3.x", () => {
+  const legacyOutput = validatePackageFailure(baseManifest({ bakingrlApi: "2.2.99" }));
+  assert.match(legacyOutput, /target host runtime API 2\.3\.x \(minimum 2\.3\.0\)/);
+  const futureOutput = validatePackageFailure(baseManifest({ bakingrlApi: "2.4.0" }));
+  assert.match(futureOutput, /target host runtime API 2\.3\.x \(minimum 2\.3\.0\)/);
+});
+
+test("validator accepts structured runtime API 2.3 permissions", () => {
+  validatePackage(baseManifest({
+    permissions: {
+      bus: {
+        read: ["UpdateState", "plugin.com.example.source.*"],
+        publish: ["plugin.com.example.package.*"]
+      },
+      registry: {
+        read: ["plugin.com.example.source.snapshot"],
+        write: ["plugin.com.example.package.*"]
+      },
+      network: {
+        http: [
+          {
+            scheme: "https",
+            host: "api.example.com",
+            ports: [443],
+            pathPrefixes: ["/v1/"]
+          }
+        ],
+        websocket: [
+          {
+            scheme: "wss",
+            host: "stream.example.com",
+            ports: "*"
+          }
+        ],
+        listen: [
+          {
+            transport: "tcp",
+            host: "127.0.0.1",
+            ports: [9134]
+          }
+        ]
+      },
+      storage: {
+        read: ["state.json", "history/*"],
+        write: ["state.json", "history/*"]
+      }
+    }
+  }));
+});
+
+test("validator rejects malformed permission patterns and network endpoints", () => {
+  const wildcardOutput = validatePackageFailure(baseManifest({
+    permissions: {
+      ...emptyPermissions(),
+      bus: { read: ["plugin.*.state"], publish: [] }
+    }
+  }));
+  assert.match(wildcardOutput, /may contain only one terminal '\*' wildcard/);
+
+  const schemeOutput = validatePackageFailure(baseManifest({
+    permissions: {
+      ...emptyPermissions(),
+      network: {
+        http: [{ scheme: "wss", host: "example.com", ports: [443] }],
+        websocket: [],
+        listen: []
+      }
+    }
+  }));
+  assert.match(schemeOutput, /network\.http\[0\]\.scheme must be one of http, https/);
+});
+
+test("validator accepts only relative runtime API 2.3 storage permission paths", () => {
+  for (const path of ["plugin://self/*", "/absolute/*", "../escape/*", "nested\\windows/*"]) {
+    const output = validatePackageFailure(baseManifest({
+      permissions: {
+        ...emptyPermissions(),
+        storage: { read: [path], write: [] }
+      }
+    }));
+    assert.match(output, /relative storage path|must not contain '\.' or '\.\.' path segments/);
+  }
+});
+
+test("validator accepts runtime API 2.3 surface webviews", () => {
+  validatePackage(baseManifest({
+    contributes: {
+      webviews: [
+        {
+          id: "overlay",
+          entry: "dist/webviews/overlay.js",
+          title: "Overlay",
+          kind: "surface",
+          defaultSize: [1280, 720],
+          surface: {
+            defaultPosition: [40, 60],
+            defaultScreen: "primary",
+            transparent: true,
+            alwaysOnTop: true,
+            clickThrough: false,
+            resizable: true
+          }
+        }
+      ]
+    }
+  }), (dir) => writeGeneratedEntry(dir, "dist/webviews/overlay.js"));
+});
+
+test("validator requires complete surface declarations", () => {
+  const missingSizeOutput = validatePackageFailure(baseManifest({
+    contributes: {
+      webviews: [
+        {
+          id: "overlay",
+          entry: "dist/webviews/overlay.js",
+          kind: "surface",
+          surface: {}
+        }
+      ]
+    }
+  }), (dir) => writeGeneratedEntry(dir, "dist/webviews/overlay.js"));
+  assert.match(missingSizeOutput, /defaultSize is required for surface webviews/);
+
+  const capabilityOutput = validatePackageFailure(baseManifest({
+    contributes: {
+      webviews: [
+        {
+          id: "overlay",
+          entry: "dist/webviews/overlay.js",
+          kind: "surface",
+          defaultSize: [640, 360],
+          surface: { transparent: "yes" }
+        }
+      ]
+    }
+  }), (dir) => writeGeneratedEntry(dir, "dist/webviews/overlay.js"));
+  assert.match(capabilityOutput, /surface\.transparent must be a boolean/);
 });
 
 test("validator rejects external contributions without a declared dependency", () => {
@@ -195,7 +366,7 @@ test("validator rejects removed host-owned visual surfaces", () => {
       visuals: []
     }
   }));
-  assert.match(output, /contributes\.visuals is not supported in runtime API 2\.2/);
+  assert.match(output, /contributes\.visuals is not supported in runtime API 2\.3/);
 });
 
 test("validator rejects legacy contribution groups", () => {
@@ -329,7 +500,7 @@ test("validator rejects contribution visual references", () => {
       ]
     }
   }));
-  assert.match(output, /contributions\[0\]\.visual is not supported in runtime API 2\.2/);
+  assert.match(output, /contributions\[0\]\.visual is not supported in runtime API 2\.3/);
 });
 
 test("validator accepts settings UI backed by a settings webview", () => {
@@ -480,6 +651,66 @@ test("validator rejects sidecar health check timeouts below the host minimum", (
   assert.match(output, /manifest\.runtime\.sidecars\[0\]\.healthCheck\.timeoutMs must be a number >= 100/);
 });
 
+test("listing validator accepts author-owned listing metadata", () => {
+  withPackage(baseManifest(), (dir) => {
+    writeAuthorListing(dir);
+    execFileSync(process.execPath, [cli.pathname, "validate-listing", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  });
+});
+
+test("submission command emits review input without catalogue approval fields", () => {
+  const permissions = emptyPermissions();
+  withPackage(baseManifest({ permissions }), (dir) => {
+    writeAuthorListing(dir);
+    writeGeneratedEntry(dir, "dist-bundles/com.example.package-1.0.0.brlp");
+    writeJsonEntry(dir, "signature.ed25519", {
+      algorithm: "ed25519",
+      publicKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      signature: "test",
+      signedFile: "manifest.hashes.json"
+    });
+    const outputPath = join(dir, "submission.json");
+    execFileSync(process.execPath, [
+      cli.pathname,
+      "prepare-submission",
+      dir,
+      "--developer",
+      "example",
+      "--bundle-url",
+      "https://github.com/example/package/releases/download/v1.0.0/com.example.package-1.0.0.brlp",
+      "--listing-url",
+      "https://raw.githubusercontent.com/example/package/v1.0.0/marketplace/listing.json",
+      "--platform",
+      "windows-x64",
+      "--output",
+      outputPath
+    ], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    const submission = readJson(outputPath);
+    assert.equal(submission.schema, "bakingrl.marketplace-submission/1");
+    assert.equal(submission.packageId, "com.example.package");
+    assert.equal(submission.runtimeApi, "2.3.0");
+    assert.equal(submission.artifacts[0].platform, "windows-x64");
+    assert.match(submission.artifacts[0].bundleSha256, /^[a-f0-9]{64}$/);
+    assert.equal(submission.listing.schema, "bakingrl.plugin-listing/1");
+    assert.deepEqual(submission.dependencies, []);
+    assert.deepEqual(submission.runtime, {
+      node: false,
+      sidecars: [],
+      webviews: []
+    });
+    assert.deepEqual(submission.permissions, permissions);
+    assert.equal(submission.review, undefined);
+    assert.equal(submission.approvedVersions, undefined);
+  });
+});
+
 test("pack accepts an explicit package directory without signing", () => {
   withPackage(baseManifest({
     runtime: {
@@ -499,7 +730,7 @@ test("pack accepts an explicit package directory without signing", () => {
   });
 });
 
-test("scaffolder creates valid runtime 2.2 package templates", () => {
+test("scaffolder creates valid runtime 2.3 package templates", () => {
   withTempDir((root) => {
     const extension = scaffoldPackage(root, "extension-template", "extension-plugin");
     writeGeneratedEntry(extension, "dist/extension/index.js");

@@ -7,7 +7,8 @@ import { spawnSync } from "node:child_process";
 import { deflateRawSync } from "node:zlib";
 
 const appId = "com.quillianne.bakingrl";
-const runtimeApiVersion = "2.2.0";
+const runtimeApiVersion = "2.3.0";
+const minSupportedRuntimeApiVersion = "2.3.0";
 const allowedTopLevelFields = new Set([
   "schemaVersion",
   "id",
@@ -15,6 +16,7 @@ const allowedTopLevelFields = new Set([
   "version",
   "author",
   "bakingrlApi",
+  "permissions",
   "dependencies",
   "runtime",
   "contributes"
@@ -31,7 +33,7 @@ const rejectedTopLevelFields = [
   "externalSurfaces"
 ];
 const removedContributeGroups = new Map([
-  ["visuals", "manifest.contributes.visuals is not supported in runtime API 2.2; use webviews for host-opened UI and resources/services/metadata for platform contributions"],
+  ["visuals", "manifest.contributes.visuals is not supported in runtime API 2.3; use webviews for host-opened UI and resources/services/metadata for platform contributions"],
   ["views", "manifest.contributes.views is not supported; use contributes.webviews"],
   ["pages", "manifest.contributes.pages is not supported; use contributes.webviews"],
   ["overlays", "manifest.contributes.overlays is not supported; expose overlay behavior through a platform plugin contract"],
@@ -49,12 +51,23 @@ const supportedContributionSections = new Set([
   "webviews"
 ]);
 const allowedWebviewKinds = new Set(["tool", "settings", "panel"]);
+const httpSchemes = new Set(["http", "https"]);
+const websocketSchemes = new Set(["ws", "wss"]);
+const listenTransports = new Set(["http", "https", "ws", "wss", "tcp"]);
 const supportedSettingSchemaTypes = new Set(["string", "number", "integer", "boolean", "array", "object"]);
 const sidecarRuntimePattern = /^sidecar:[a-zA-Z0-9._-]+$/;
 const sidecarActivationModes = new Set(["manual", "onEnable", "onStartup"]);
 const sidecarProtocol = "jsonrpc-stdio";
 const sidecarHealthCheckMinIntervalMs = 500;
 const sidecarHealthCheckMinTimeoutMs = 100;
+const supportedSubmissionPlatforms = new Set([
+  "any",
+  "darwin-arm64",
+  "darwin-x64",
+  "linux-arm64",
+  "linux-x64",
+  "windows-x64"
+]);
 
 function fail(message) {
   console.error(message);
@@ -67,6 +80,10 @@ function readJson(path) {
   } catch (error) {
     fail(`Unable to read valid JSON at ${path}: ${error.message}`);
   }
+}
+
+function writeJson(path, value) {
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function appDataDir() {
@@ -191,13 +208,20 @@ function validateSemverVersion(value, label) {
 function validateRuntimeCompatibility(manifest) {
   const runtimeApi = manifest.bakingrlApi;
   const current = parseRuntimeApi(runtimeApiVersion);
+  const minimum = parseRuntimeApi(minSupportedRuntimeApiVersion);
   const declared = parseRuntimeApi(runtimeApi);
   if (!declared) {
     fail("manifest.bakingrlApi must be an exact semver version");
   }
-  if (declared.major !== current.major || declared.minor !== current.minor) {
-    fail(`manifest.bakingrlApi must target host runtime API ${current.major}.${current.minor}.x`);
+  if (
+    declared.major !== current.major ||
+    declared.minor !== current.minor ||
+    declared.major !== minimum.major ||
+    declared.minor !== minimum.minor
+  ) {
+    fail(`manifest.bakingrlApi must target host runtime API ${current.major}.${current.minor}.x (minimum ${minSupportedRuntimeApiVersion})`);
   }
+  return declared;
 }
 
 function validateBuiltEntry(packageDir, groupName, name, exportDef) {
@@ -323,6 +347,160 @@ function validateDefaultSize(value, label) {
   if (value === undefined) return;
   if (!Array.isArray(value) || value.length !== 2 || value.some((entry) => !Number.isFinite(entry) || entry <= 0)) {
     fail(`${label} must be a [width, height] array of positive numbers`);
+  }
+}
+
+function validatePosition(value, label) {
+  if (!Array.isArray(value) || value.length !== 2 || value.some((entry) => !Number.isFinite(entry))) {
+    fail(`${label} must be an [x, y] array of finite numbers`);
+  }
+}
+
+function requireObjectFields(value, label, fields) {
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(value, field)) {
+      fail(`${label}.${field} is required`);
+    }
+  }
+}
+
+function validatePermissionPattern(value, label) {
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be a non-empty string`);
+  }
+  const firstWildcard = value.indexOf("*");
+  if (firstWildcard !== -1 && (firstWildcard !== value.length - 1 || value.lastIndexOf("*") !== firstWildcard)) {
+    fail(`${label} may contain only one terminal '*' wildcard`);
+  }
+}
+
+function validatePermissionPatterns(value, label, validator = validatePermissionPattern) {
+  if (!Array.isArray(value)) {
+    fail(`${label} must be an array`);
+  }
+  value.forEach((entry, index) => validator(entry, `${label}[${index}]`));
+}
+
+function validateStoragePermissionPattern(value, label) {
+  validatePermissionPattern(value, label);
+  if (value === "*") return;
+  const path = value.endsWith("*") ? value.slice(0, -1) : value;
+  if (
+    path.startsWith("/") ||
+    path.startsWith("~") ||
+    path.includes("\\") ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(path)
+  ) {
+    fail(`${label} must be a relative storage path using '/' separators`);
+  }
+  const normalizedPath = path.endsWith("/") ? path.slice(0, -1) : path;
+  if (normalizedPath === "" || normalizedPath.includes("//")) {
+    fail(`${label} must be a normalized relative storage path`);
+  }
+  if (normalizedPath.split("/").some((segment) => segment === "." || segment === ".." || segment === "")) {
+    fail(`${label} must not contain '.' or '..' path segments`);
+  }
+}
+
+function validatePorts(value, label) {
+  if (value === "*") return;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((port) => !Number.isInteger(port) || port < 1 || port > 65535)
+  ) {
+    fail(`${label} must be '*' or a non-empty array of ports from 1 to 65535`);
+  }
+}
+
+function validateNetworkEndpoint(endpoint, label, schemes) {
+  assertPlainObject(endpoint, label);
+  assertAllowedKeys(endpoint, label, new Set(["scheme", "host", "ports", "pathPrefixes"]));
+  requireObjectFields(endpoint, label, ["scheme", "host", "ports"]);
+  if (!schemes.has(endpoint.scheme)) {
+    fail(`${label}.scheme must be one of ${Array.from(schemes).join(", ")}`);
+  }
+  if (typeof endpoint.host !== "string" || endpoint.host.trim() === "") {
+    fail(`${label}.host must be a non-empty string`);
+  }
+  validatePorts(endpoint.ports, `${label}.ports`);
+  if (endpoint.pathPrefixes !== undefined) {
+    validatePermissionPatterns(endpoint.pathPrefixes, `${label}.pathPrefixes`, (prefix, prefixLabel) => {
+      if (typeof prefix !== "string" || !prefix.startsWith("/") || prefix.includes("?") || prefix.includes("#")) {
+        fail(`${prefixLabel} must be an absolute URL path without a query or fragment`);
+      }
+    });
+  }
+}
+
+function validateListenEndpoint(endpoint, label) {
+  assertPlainObject(endpoint, label);
+  assertAllowedKeys(endpoint, label, new Set(["transport", "host", "ports"]));
+  requireObjectFields(endpoint, label, ["transport", "host", "ports"]);
+  if (!listenTransports.has(endpoint.transport)) {
+    fail(`${label}.transport must be one of ${Array.from(listenTransports).join(", ")}`);
+  }
+  if (typeof endpoint.host !== "string" || endpoint.host.trim() === "") {
+    fail(`${label}.host must be a non-empty string`);
+  }
+  validatePorts(endpoint.ports, `${label}.ports`);
+}
+
+function validatePermissionGroup(value, label, fields, validator = validatePermissionPatterns) {
+  assertPlainObject(value, label);
+  assertAllowedKeys(value, label, new Set(fields));
+  requireObjectFields(value, label, fields);
+  for (const field of fields) validator(value[field], `${label}.${field}`);
+}
+
+function validateManifestPermissions(manifest) {
+  if (manifest.permissions === undefined) return;
+  const permissions = assertPlainObject(manifest.permissions, "manifest.permissions");
+  const groups = ["bus", "registry", "network", "storage"];
+  assertAllowedKeys(permissions, "manifest.permissions", new Set(groups));
+  requireObjectFields(permissions, "manifest.permissions", groups);
+  validatePermissionGroup(permissions.bus, "manifest.permissions.bus", ["read", "publish"]);
+  validatePermissionGroup(permissions.registry, "manifest.permissions.registry", ["read", "write"]);
+  validatePermissionGroup(
+    permissions.storage,
+    "manifest.permissions.storage",
+    ["read", "write"],
+    (value, label) => validatePermissionPatterns(value, label, validateStoragePermissionPattern)
+  );
+
+  const network = assertPlainObject(permissions.network, "manifest.permissions.network");
+  const networkFields = ["http", "websocket", "listen"];
+  assertAllowedKeys(network, "manifest.permissions.network", new Set(networkFields));
+  requireObjectFields(network, "manifest.permissions.network", networkFields);
+  if (!Array.isArray(network.http)) fail("manifest.permissions.network.http must be an array");
+  if (!Array.isArray(network.websocket)) fail("manifest.permissions.network.websocket must be an array");
+  if (!Array.isArray(network.listen)) fail("manifest.permissions.network.listen must be an array");
+  network.http.forEach((endpoint, index) => {
+    validateNetworkEndpoint(endpoint, `manifest.permissions.network.http[${index}]`, httpSchemes);
+  });
+  network.websocket.forEach((endpoint, index) => {
+    validateNetworkEndpoint(endpoint, `manifest.permissions.network.websocket[${index}]`, websocketSchemes);
+  });
+  network.listen.forEach((endpoint, index) => {
+    validateListenEndpoint(endpoint, `manifest.permissions.network.listen[${index}]`);
+  });
+}
+
+function validateSurfaceDeclaration(surface, label) {
+  assertPlainObject(surface, label);
+  assertAllowedKeys(
+    surface,
+    label,
+    new Set(["defaultPosition", "defaultScreen", "transparent", "alwaysOnTop", "clickThrough", "resizable"])
+  );
+  if (surface.defaultPosition !== undefined) {
+    validatePosition(surface.defaultPosition, `${label}.defaultPosition`);
+  }
+  validateOptionalString(surface.defaultScreen, `${label}.defaultScreen`);
+  for (const field of ["transparent", "alwaysOnTop", "clickThrough", "resizable"]) {
+    if (surface[field] !== undefined && typeof surface[field] !== "boolean") {
+      fail(`${label}.${field} must be a boolean`);
+    }
   }
 }
 
@@ -617,17 +795,30 @@ function validateContributionWebviews(packageDir, webviews = []) {
   for (const [index, webview] of Object.entries(webviews)) {
     const label = `manifest.contributes.webviews[${index}]`;
     assertPlainObject(webview, label);
-    assertAllowedKeys(webview, label, new Set(["id", "entry", "title", "kind", "defaultSize"]));
+    const declaresSurface = webview.kind === "surface" || Object.prototype.hasOwnProperty.call(webview, "surface");
+    assertAllowedKeys(
+      webview,
+      label,
+      new Set(declaresSurface ? ["id", "entry", "title", "kind", "defaultSize", "surface"] : ["id", "entry", "title", "kind", "defaultSize"])
+    );
     validateExportName(`${label}.id`, webview.id);
     if (webviewsById.has(webview.id)) fail(`${label}.id is duplicated`);
     webviewsById.set(webview.id, webview);
     if (webview.entry === undefined) fail(`${label}.entry is required`);
     validateBuiltEntry(packageDir, "contributes.webviews", index, webview);
     validateOptionalString(webview.title, `${label}.title`);
-    if (webview.kind !== undefined && !allowedWebviewKinds.has(webview.kind)) {
-      fail(`${label}.kind must be tool, settings, or panel`);
+    if (declaresSurface) {
+      if (webview.kind !== "surface") fail(`${label}.kind must be surface when ${label}.surface is declared`);
+      if (webview.defaultSize === undefined) fail(`${label}.defaultSize is required for surface webviews`);
+      if (webview.surface === undefined) fail(`${label}.surface is required for surface webviews`);
+      validateDefaultSize(webview.defaultSize, `${label}.defaultSize`);
+      validateSurfaceDeclaration(webview.surface, `${label}.surface`);
+    } else {
+      if (webview.kind !== undefined && !allowedWebviewKinds.has(webview.kind)) {
+        fail(`${label}.kind must be tool, settings, panel, or surface`);
+      }
+      validateDefaultSize(webview.defaultSize, `${label}.defaultSize`);
     }
-    validateDefaultSize(webview.defaultSize, `${label}.defaultSize`);
   }
   return webviewsById;
 }
@@ -641,7 +832,7 @@ function validateContributionContributions(packageDir, manifest, contributions =
     const label = `manifest.contributes.contributions[${index}]`;
     assertPlainObject(contribution, label);
     if (Object.prototype.hasOwnProperty.call(contribution, "visual")) {
-      fail(`${label}.visual is not supported in runtime API 2.2; use metadata, resources, or service references`);
+      fail(`${label}.visual is not supported in runtime API 2.3; use metadata, resources, or service references`);
     }
     assertAllowedKeys(contribution, label, new Set([
       "id",
@@ -759,10 +950,282 @@ function validateNoEmbeddedNodeRuntime(packageDir) {
 function validatePackage(packageDir, { print = true } = {}) {
   const manifest = readPackageManifest(packageDir);
   validateRuntimeCompatibility(manifest);
+  validateOptionalString(manifest.author, "manifest.author");
+  validateManifestPermissions(manifest);
   validatePackageV4(packageDir, manifest);
   validateNoEmbeddedNodeRuntime(packageDir);
   if (print) console.log(`Package validation passed: ${manifest.id}`);
   return manifest;
+}
+
+function parseOptions(args) {
+  const options = { positional: [] };
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg.startsWith("--")) {
+      options.positional.push(arg);
+      continue;
+    }
+    const raw = arg.slice(2);
+    const equalsIndex = raw.indexOf("=");
+    const rawKey = equalsIndex === -1 ? raw : raw.slice(0, equalsIndex);
+    const inlineValue = equalsIndex === -1 ? undefined : raw.slice(equalsIndex + 1);
+    const key = rawKey.replaceAll("-", "_");
+    if (inlineValue !== undefined) {
+      options[key] = inlineValue;
+    } else if (args[index + 1] && !args[index + 1].startsWith("--")) {
+      options[key] = args[index + 1];
+      index += 1;
+    } else {
+      options[key] = true;
+    }
+  }
+  return options;
+}
+
+function requireOption(options, key, label) {
+  const value = options[key];
+  if (typeof value !== "string" || value.trim() === "") fail(`Missing ${label}.`);
+  return value.trim();
+}
+
+function validateListingString(value, label, maximum) {
+  if (typeof value !== "string" || value.trim() === "") {
+    fail(`${label} must be a non-empty string.`);
+  }
+  if (value.length > maximum) fail(`${label} must be at most ${maximum} characters.`);
+  return value;
+}
+
+function parseHttpsUrl(value, label) {
+  if (typeof value !== "string" || value.trim() === "") fail(`${label} must be a non-empty HTTPS URL.`);
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    fail(`${label} must be a valid HTTPS URL.`);
+  }
+  if (parsed.protocol !== "https:") fail(`${label} must use HTTPS.`);
+  return parsed;
+}
+
+function githubRepoParts(value, label = "marketplace/listing.json repo") {
+  const parsed = parseHttpsUrl(value, label);
+  if (parsed.hostname !== "github.com") {
+    fail(`${label} must use https://github.com/<owner>/<repo>.`);
+  }
+  const [owner, rawRepo, ...rest] = parsed.pathname.split("/").filter(Boolean);
+  const repo = rawRepo?.replace(/\.git$/, "");
+  if (!owner || !repo || rest.length > 0) {
+    fail(`${label} must use https://github.com/<owner>/<repo>.`);
+  }
+  return { owner, repo };
+}
+
+function isGitHubRepoUrl(parsed, repoParts, { releaseAsset = false } = {}) {
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  if (parsed.hostname === "github.com") {
+    const [owner, rawRepo, segment, action] = parts;
+    if (owner !== repoParts.owner || rawRepo?.replace(/\.git$/, "") !== repoParts.repo) return false;
+    return releaseAsset ? segment === "releases" && action === "download" : true;
+  }
+  if (!releaseAsset && parsed.hostname === "raw.githubusercontent.com") {
+    const [owner, repo] = parts;
+    return owner === repoParts.owner && repo === repoParts.repo;
+  }
+  return false;
+}
+
+function validateOptionalListingUrl(value, label, repoParts) {
+  if (value === undefined || value === null) return;
+  const parsed = parseHttpsUrl(value, label);
+  if (!isGitHubRepoUrl(parsed, repoParts)) {
+    fail(`${label} must point to the declared GitHub repository.`);
+  }
+}
+
+function validateListing(packageDir, { print = true } = {}) {
+  const manifest = readPackageManifest(packageDir);
+  const listingPath = join(packageDir, "marketplace", "listing.json");
+  if (!existsSync(listingPath)) fail(`Missing marketplace/listing.json in ${packageDir}`);
+  const listing = readJson(listingPath);
+  assertAllowedKeys(
+    listing,
+    "marketplace/listing.json",
+    new Set([
+      "schema",
+      "packageId",
+      "displayName",
+      "shortDescription",
+      "longDescription",
+      "tags",
+      "repo",
+      "iconUrl",
+      "bannerUrl",
+      "screenshots",
+      "links"
+    ])
+  );
+  requireObjectFields(listing, "marketplace/listing.json", [
+    "schema",
+    "packageId",
+    "displayName",
+    "shortDescription",
+    "longDescription",
+    "tags",
+    "repo",
+    "screenshots"
+  ]);
+  if (listing.schema !== "bakingrl.plugin-listing/1") {
+    fail("marketplace/listing.json schema must be bakingrl.plugin-listing/1");
+  }
+  if (listing.packageId !== manifest.id) {
+    fail(`marketplace/listing.json packageId must match manifest.id (${manifest.id}).`);
+  }
+  validateListingString(listing.displayName, "marketplace/listing.json displayName", 120);
+  validateListingString(listing.shortDescription, "marketplace/listing.json shortDescription", 180);
+  validateListingString(listing.longDescription, "marketplace/listing.json longDescription", 8000);
+  if (!Array.isArray(listing.tags) || listing.tags.some((tag) => typeof tag !== "string" || tag.trim() === "")) {
+    fail("marketplace/listing.json tags must be an array of non-empty strings.");
+  }
+  const repo = validateListingString(listing.repo, "marketplace/listing.json repo", 240);
+  const repoParts = githubRepoParts(repo);
+  validateOptionalListingUrl(listing.iconUrl, "marketplace/listing.json iconUrl", repoParts);
+  validateOptionalListingUrl(listing.bannerUrl, "marketplace/listing.json bannerUrl", repoParts);
+  if (!Array.isArray(listing.screenshots)) fail("marketplace/listing.json screenshots must be an array.");
+  for (const [index, screenshot] of listing.screenshots.entries()) {
+    const label = `marketplace/listing.json screenshots[${index}]`;
+    assertPlainObject(screenshot, label);
+    assertAllowedKeys(screenshot, label, new Set(["url", "alt", "caption"]));
+    requireObjectFields(screenshot, label, ["url"]);
+    validateOptionalListingUrl(screenshot.url, `${label}.url`, repoParts);
+    if (screenshot.alt !== undefined) validateListingString(screenshot.alt, `${label}.alt`, 180);
+    if (screenshot.caption !== undefined) validateListingString(screenshot.caption, `${label}.caption`, 240);
+  }
+  if (listing.links !== undefined) {
+    assertPlainObject(listing.links, "marketplace/listing.json links");
+    for (const [key, value] of Object.entries(listing.links)) {
+      parseHttpsUrl(value, `marketplace/listing.json links.${key}`);
+    }
+  }
+  if (print) console.log(`Marketplace author listing validation passed: ${manifest.id}`);
+  return { listing, manifest, repoParts };
+}
+
+function submissionPlatform(options) {
+  const value = options.platform === undefined || options.platform === true ? "any" : String(options.platform).trim();
+  if (!supportedSubmissionPlatforms.has(value)) {
+    fail(`--platform must be one of: ${Array.from(supportedSubmissionPlatforms).join(", ")}.`);
+  }
+  return value;
+}
+
+function submissionRuntime(manifest, artifactPlatform) {
+  const sidecars = (manifest.runtime?.sidecars ?? []).map((sidecar) => {
+    const platforms = sidecar.platforms?.length > 0 ? [...sidecar.platforms] : [artifactPlatform];
+    for (const platform of platforms) {
+      if (!supportedSubmissionPlatforms.has(platform)) {
+        fail(`manifest.runtime.sidecars '${sidecar.id}' uses unsupported marketplace platform '${platform}'.`);
+      }
+    }
+    return { id: sidecar.id, platforms };
+  });
+  const webviews = (manifest.contributes?.webviews ?? []).map((webview) => ({
+    id: webview.id,
+    kind: webview.kind ?? "tool"
+  }));
+  return {
+    node: Boolean(manifest.runtime?.node),
+    sidecars,
+    webviews
+  };
+}
+
+function emptyManifestPermissions() {
+  return {
+    bus: { read: [], publish: [] },
+    registry: { read: [], write: [] },
+    network: { http: [], websocket: [], listen: [] },
+    storage: { read: [], write: [] }
+  };
+}
+
+function findBundlePath(packageDir, manifest) {
+  const bundlePath = join(packageDir, "dist-bundles", `${manifest.id}-${manifest.version}.brlp`);
+  if (!existsSync(bundlePath)) fail(`Missing packed bundle: ${bundlePath}`);
+  return bundlePath;
+}
+
+function readSignaturePublicKey(packageDir) {
+  const signaturePath = join(packageDir, "signature.ed25519");
+  if (!existsSync(signaturePath)) {
+    fail("Missing signature.ed25519. Run pack --sign before preparing a marketplace submission.");
+  }
+  const signature = readJson(signaturePath);
+  if (signature.algorithm !== "ed25519" || typeof signature.publicKey !== "string" || signature.publicKey.trim() === "") {
+    fail("signature.ed25519 must contain an Ed25519 publicKey.");
+  }
+  return signature.publicKey;
+}
+
+function writeOrPrintJson(value, outputPath) {
+  if (!outputPath) {
+    console.log(JSON.stringify(value, null, 2));
+    return;
+  }
+  mkdirSync(dirname(outputPath), { recursive: true });
+  writeJson(outputPath, value);
+}
+
+function prepareSubmission(packageDir, args) {
+  const options = parseOptions(args);
+  const developerId = requireOption(options, "developer", "--developer");
+  validatePackageId(developerId, "--developer");
+  const manifest = validatePackage(packageDir, { print: false });
+  const { listing, repoParts } = validateListing(packageDir, { print: false });
+  const bundlePath = options.bundle
+    ? resolve(process.cwd(), requireOption(options, "bundle", "--bundle"))
+    : findBundlePath(packageDir, manifest);
+  if (!existsSync(bundlePath) || !statSync(bundlePath).isFile()) fail(`Bundle does not exist: ${bundlePath}`);
+
+  const bundleUrl = requireOption(options, "bundle_url", "--bundle-url");
+  if (!isGitHubRepoUrl(parseHttpsUrl(bundleUrl, "--bundle-url"), repoParts, { releaseAsset: true })) {
+    fail("--bundle-url must be a GitHub release asset from the listing repository.");
+  }
+  const listingUrl = requireOption(options, "listing_url", "--listing-url");
+  if (!isGitHubRepoUrl(parseHttpsUrl(listingUrl, "--listing-url"), repoParts)) {
+    fail("--listing-url must point to the listing repository.");
+  }
+  const platform = submissionPlatform(options);
+
+  const submission = {
+    schema: "bakingrl.marketplace-submission/1",
+    packageId: manifest.id,
+    developerId,
+    version: manifest.version,
+    runtimeApi: manifest.bakingrlApi,
+    repo: listing.repo,
+    listingUrl,
+    listing,
+    dependencies: (manifest.dependencies ?? []).map((dependency) => ({
+      packageId: dependency.packageId,
+      version: dependency.version,
+      optional: dependency.optional ?? false
+    })),
+    runtime: submissionRuntime(manifest, platform),
+    artifacts: [
+      {
+        platform,
+        bundleUrl,
+        bundleSha256: sha256File(bundlePath),
+        signaturePublicKey: readSignaturePublicKey(packageDir)
+      }
+    ],
+    permissions: manifest.permissions ?? emptyManifestPermissions(),
+    generatedAt: new Date().toISOString()
+  };
+  const outputPath = options.output ? resolve(process.cwd(), String(options.output)) : null;
+  writeOrPrintJson(submission, outputPath);
 }
 
 function pathForZip(path) {
@@ -1034,6 +1497,7 @@ function doctor(packageDir) {
     },
     buildEntries: collectBuildEntries(manifest),
     dependencies: manifest.dependencies ?? [],
+    permissions: manifest.permissions ?? null,
     sidecars: (manifest.runtime?.sidecars ?? []).map((sidecar) => sidecar.id),
     contributes: {
       commands: (manifest.contributes?.commands ?? []).map((command) => command.id),
@@ -1056,6 +1520,7 @@ function inspect(packageDir) {
     schemaVersion: manifestSchemaVersion,
     version: manifest.version,
     bakingrlApi: manifestBakingrlApi ?? null,
+    permissions: manifest.permissions ?? null,
     dependencies: manifest.dependencies ?? [],
     runtime: manifest.runtime,
     contributes: manifest.contributes ?? {}
@@ -1095,6 +1560,12 @@ function main() {
   const maybeDir = args[0];
   const packageDir = resolve(process.cwd(), maybeDir && !maybeDir.startsWith("-") ? maybeDir : ".");
   if (command === "validate") return validatePackage(packageDir);
+  if (command === "validate-listing") return validateListing(packageDir);
+  if (command === "prepare-submission" || command === "submission") {
+    const options = parseOptions(args);
+    const submissionDir = resolve(process.cwd(), options.positional[0] ?? ".");
+    return prepareSubmission(submissionDir, args);
+  }
   if (command === "doctor") return doctor(packageDir);
   if (command === "pack") {
     const keyIndex = args.indexOf("--sign");
@@ -1113,7 +1584,7 @@ function main() {
     console.log(appDataDir());
     return;
   }
-  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|doctor|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]");
+  fail("Usage: node scripts/bakingrl-plugin.mjs <validate|doctor|validate-listing|pack|inspect|install-local|packages-dir> [package-dir]\n       node scripts/bakingrl-plugin.mjs keygen [key-file]\n       node scripts/bakingrl-plugin.mjs sign --key <key-file> [package-dir]\n       node scripts/bakingrl-plugin.mjs pack [package-dir] [--sign <key-file>]\n       node scripts/bakingrl-plugin.mjs prepare-submission [package-dir] --developer <id> --bundle-url <url> --listing-url <url> [--bundle <path>] [--platform <platform>] [--output <path>]");
 }
 
 main();

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   RL_TELEMETRY_EVENT_NAMES,
   RL_TELEMETRY_FRAME_TEMPLATES,
+  MIN_SUPPORTED_RUNTIME_API_VERSION,
   RUNTIME_API_VERSION,
   SDK_VERSION,
   createExtensionTarget,
@@ -44,23 +45,49 @@ test("exports SDK and runtime API contract constants", () => {
   const packageJson = JSON.parse(readFileSync(resolve(packageDir, "package.json"), "utf8"));
 
   assert.equal(SDK_VERSION, packageJson.version);
-  assert.equal(RUNTIME_API_VERSION, "2.2.0");
+  assert.equal(RUNTIME_API_VERSION, "2.3.0");
+  assert.equal(MIN_SUPPORTED_RUNTIME_API_VERSION, "2.3.0");
 });
 
 test("exports manifest V4 author-facing declarations", () => {
   const declarations = readFileSync(resolve(packageDir, "dist", "index.d.ts"), "utf8");
 
-  assert.match(declarations, /export type BakingRLCompatibleApiVersion = `2\.2\.\$\{number\}`;/);
+  assert.match(declarations, /export type BakingRLCompatibleApiVersion = `2\.3\.\$\{number\}`;/);
   assert.match(declarations, /export type PluginManifestV4Contributes = \{/);
   assert.match(declarations, /contributions\?: ContributionContribution\[\];/);
   assert.match(declarations, /resources\?: ContributionResource\[\];/);
   assert.match(declarations, /export type PluginManifestV4 = \{/);
   assert.match(declarations, /schemaVersion: "bakingrl\.plugin\/4";/);
   assert.match(declarations, /bakingrlApi: BakingRLCompatibleApiVersion;/);
+  assert.match(declarations, /permissions\?: PluginPermissions;/);
   assert.match(declarations, /export type PluginGraphResource = ContributionResource & \{/);
   assert.match(declarations, /public: boolean;/);
   assert.match(declarations, /export type PluginGraphContributes = Omit<PluginManifestV4Contributes, "resources"> & \{/);
   assert.match(declarations, /contributes: PluginGraphContributes;/);
+});
+
+test("exports runtime API 2.3 permissions, surfaces, and storage contracts", () => {
+  const declarations = readFileSync(resolve(packageDir, "dist", "index.d.ts"), "utf8");
+
+  assert.match(declarations, /export type NetworkEndpoint = \{[\s\S]*scheme: "http" \| "https" \| "ws" \| "wss";[\s\S]*ports: "\*" \| number\[\];[\s\S]*pathPrefixes\?: string\[\];/);
+  assert.match(declarations, /export type ListenEndpoint = \{[\s\S]*transport: "http" \| "https" \| "ws" \| "wss" \| "tcp";/);
+  assert.match(declarations, /export type PluginPermissions = \{[\s\S]*bus: \{[\s\S]*publish: PermissionPattern\[\];[\s\S]*network: \{[\s\S]*listen: ListenEndpoint\[\];[\s\S]*storage: \{/);
+  assert.match(declarations, /export type SurfaceDeclaration = \{[\s\S]*kind: "surface";[\s\S]*defaultSize: \[number, number\];[\s\S]*clickThrough\?: boolean;[\s\S]*resizable\?: boolean;/);
+  assert.match(declarations, /export type ContributionWebview = StandardContributionWebview \| SurfaceDeclaration;/);
+  assert.match(declarations, /export type WebviewOpenState = SurfaceState \| StandardWebviewState;/);
+  assert.match(declarations, /open\(id: string, options\?: WebviewOpenOptions\): Promise<WebviewOpenState>;/);
+  assert.doesNotMatch(declarations, /storagePath: string;/);
+  assert.match(declarations, /export type PluginStorage = \{[\s\S]*readJson<T extends JsonValue = JsonValue>\(path: string\): Promise<T>;[\s\S]*writeJson\(path: string, value: JsonValue\): Promise<void>;[\s\S]*list\(prefix\?: string\): Promise<string\[\]>;[\s\S]*delete\(path: string\): Promise<boolean>;[\s\S]*usage\(\): Promise<\{/);
+});
+
+test("exports render bundle and author submission contracts without a catalogue schema", () => {
+  const declarations = readFileSync(resolve(packageDir, "dist", "index.d.ts"), "utf8");
+
+  assert.match(declarations, /export type RenderBundleV1 = \{[\s\S]*schema: "bakingrl\.render-bundle\/1";[\s\S]*initialData: Record<string, JsonValue>;/);
+  assert.match(declarations, /export type PluginAuthorListingV1 = \{[\s\S]*schema: "bakingrl\.plugin-listing\/1";/);
+  assert.match(declarations, /export type MarketplaceSubmissionRuntime = \{[\s\S]*node: boolean;[\s\S]*kind: "tool" \| "settings" \| "panel" \| "surface";/);
+  assert.match(declarations, /export type MarketplaceSubmissionV1 = \{[\s\S]*schema: "bakingrl\.marketplace-submission\/1";[\s\S]*listing: PluginAuthorListingV1;[\s\S]*dependencies: MarketplaceSubmissionDependency\[\];[\s\S]*runtime: MarketplaceSubmissionRuntime;[\s\S]*permissions: PluginPermissions;/);
+  assert.doesNotMatch(declarations, /bakingrl\.marketplace\/2/);
 });
 
 test("exports host-mediated webview context declarations", () => {
