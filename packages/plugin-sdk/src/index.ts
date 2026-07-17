@@ -1,6 +1,6 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
-export const SDK_VERSION = "2.3.1";
+export const SDK_VERSION = "2.4.0";
 export const RUNTIME_API_VERSION = "2.4.0";
 export const MIN_SUPPORTED_RUNTIME_API_VERSION = "2.3.0";
 
