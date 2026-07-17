@@ -14,7 +14,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    name: Check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check SDK
+        run: npm run check
+
   publish:
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -36,9 +63,6 @@ jobs:
       - name: Validate release tag
         run: |
           node -e "const fs = require('node:fs'); const tag = process.env.GITHUB_REF_NAME; const root = JSON.parse(fs.readFileSync('package.json', 'utf8')); const sdk = JSON.parse(fs.readFileSync('packages/plugin-sdk/package.json', 'utf8')); const cli = JSON.parse(fs.readFileSync('packages/create-bakingrl-plugin/package.json', 'utf8')); const expected = 'v' + root.version; if (tag !== expected) throw new Error('Release tag ' + tag + ' must match root version ' + expected); for (const pkg of [sdk, cli]) { if (pkg.version !== root.version) throw new Error(pkg.name + ' version ' + pkg.version + ' must match root version ' + root.version); }"
-
-      - name: Check SDK
-        run: npm run check
 
       - name: Verify package contents
         run: |
