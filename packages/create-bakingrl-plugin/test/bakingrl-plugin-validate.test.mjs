@@ -1,12 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { inflateRawSync } from "node:zlib";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const cli = new URL("../lib/bakingrl-plugin.mjs", import.meta.url);
-const createCli = new URL("../bin/create-bakingrl-plugin.mjs", import.meta.url);
+const cli = fileURLToPath(new URL("../lib/bakingrl-plugin.mjs", import.meta.url));
+const createCli = fileURLToPath(new URL("../bin/create-bakingrl-plugin.mjs", import.meta.url));
 const sidecarBin = "sidecars/native-helper/bin";
 const legacyContributes = ["pages", "views", "overlays", "configuration", "visuals", "assets", "schemas"];
 
@@ -23,7 +26,7 @@ function withPackage(manifest, callback) {
 function validatePackage(manifest, setupPackage) {
   return withPackage(manifest, (dir) => {
     setupPackage?.(dir);
-    execFileSync(process.execPath, [cli.pathname, "validate", dir], {
+    execFileSync(process.execPath, [cli, "validate", dir], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -34,7 +37,7 @@ function validatePackageFailure(manifest, setupPackage) {
   return withPackage(manifest, (dir) => {
     setupPackage?.(dir);
     try {
-      execFileSync(process.execPath, [cli.pathname, "validate", dir], {
+      execFileSync(process.execPath, [cli, "validate", dir], {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"]
       });
@@ -55,7 +58,7 @@ function withTempDir(callback) {
 }
 
 function scaffoldPackage(root, name, template) {
-  execFileSync(process.execPath, [createCli.pathname, name, "--template", template], {
+  execFileSync(process.execPath, [createCli, name, "--template", template], {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"]
@@ -69,6 +72,17 @@ function writeGeneratedEntry(packageDir, relativePath) {
   writeFileSync(path, "export default {};\n");
 }
 
+function writeTextEntry(packageDir, relativePath, contents) {
+  const path = join(packageDir, relativePath);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, contents);
+}
+
+function writeNodePackage(packageDir, contents = "export function activate() {}\nexport function deactivate() {}\n") {
+  writeJsonEntry(packageDir, "package.json", { type: "module" });
+  writeTextEntry(packageDir, "dist/extension/index.js", contents);
+}
+
 function writeJsonEntry(packageDir, relativePath, value) {
   const path = join(packageDir, relativePath);
   mkdirSync(dirname(path), { recursive: true });
@@ -79,6 +93,38 @@ function validateGeneratedPackage(packageDir) {
   execFileSync(process.execPath, [join(packageDir, "scripts", "bakingrl-plugin.mjs"), "validate", packageDir], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"]
+  });
+}
+
+function runCliFailure(args, { cwd = tmpdir(), env = process.env } = {}) {
+  try {
+    execFileSync(process.execPath, [cli, ...args], {
+      cwd,
+      env,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    assert.fail("Expected helper CLI command to fail");
+  } catch (error) {
+    if (error instanceof assert.AssertionError) throw error;
+    return `${error.stdout ?? ""}${error.stderr ?? ""}`;
+  }
+}
+
+async function waitForValue(callback, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = callback();
+    if (value) return value;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 5));
+  }
+  throw new Error(`Timed out after ${timeoutMs}ms`);
+}
+
+function waitForChild(child) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    child.once("error", rejectPromise);
+    child.once("close", (code, signal) => resolvePromise({ code, signal }));
   });
 }
 
@@ -123,6 +169,17 @@ function baseManifest(overrides = {}) {
     version: "1.0.0",
     ...overrides
   };
+}
+
+function nodeRuntimeManifest(overrides = {}) {
+  return baseManifest({
+    runtime: {
+      node: {
+        entry: "dist/extension/index.js"
+      }
+    },
+    ...overrides
+  });
 }
 
 function emptyPermissions() {
@@ -654,7 +711,7 @@ test("validator rejects sidecar health check timeouts below the host minimum", (
 test("listing validator accepts author-owned listing metadata", () => {
   withPackage(baseManifest(), (dir) => {
     writeAuthorListing(dir);
-    execFileSync(process.execPath, [cli.pathname, "validate-listing", dir], {
+    execFileSync(process.execPath, [cli, "validate-listing", dir], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -665,16 +722,18 @@ test("submission command emits review input without catalogue approval fields", 
   const permissions = emptyPermissions();
   withPackage(baseManifest({ permissions }), (dir) => {
     writeAuthorListing(dir);
-    writeGeneratedEntry(dir, "dist-bundles/com.example.package-1.0.0.brlp");
-    writeJsonEntry(dir, "signature.ed25519", {
-      algorithm: "ed25519",
-      publicKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-      signature: "test",
-      signedFile: "manifest.hashes.json"
+    const keyPath = join(dir, "bakingrl-signing-key.json");
+    execFileSync(process.execPath, [cli, "keygen", keyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    execFileSync(process.execPath, [cli, "pack", dir, "--sign", keyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
     });
     const outputPath = join(dir, "submission.json");
     execFileSync(process.execPath, [
-      cli.pathname,
+      cli,
       "prepare-submission",
       dir,
       "--developer",
@@ -711,22 +770,959 @@ test("submission command emits review input without catalogue approval fields", 
   });
 });
 
-test("pack accepts an explicit package directory without signing", () => {
-  withPackage(baseManifest({
-    runtime: {
-      node: {
-        entry: "dist/extension/index.js"
-      }
+test("submission command rejects source metadata that differs from the exact signed bundle", () => {
+  withPackage(baseManifest(), (dir) => {
+    writeAuthorListing(dir);
+    const keyPath = join(dir, "bakingrl-signing-key.json");
+    execFileSync(process.execPath, [cli, "keygen", keyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    execFileSync(process.execPath, [cli, "pack", dir, "--sign", keyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const listing = readJson(join(dir, "marketplace/listing.json"));
+    listing.longDescription = "Changed after the release artifact was signed.";
+    writeJsonEntry(dir, "marketplace/listing.json", listing);
+    const output = runCliFailure([
+      "prepare-submission",
+      dir,
+      "--developer",
+      "example",
+      "--bundle-url",
+      "https://github.com/example/package/releases/download/v1.0.0/com.example.package-1.0.0.brlp",
+      "--listing-url",
+      "https://raw.githubusercontent.com/example/package/v1.0.0/marketplace/listing.json"
+    ]);
+    assert.match(output, /Bundle entry 'marketplace\/listing\.json' does not match the staged package snapshot/);
+  });
+});
+
+test("submission command rejects signed ZIP entries marked as Unix symlinks", () => {
+  withPackage(baseManifest(), (dir) => {
+    writeAuthorListing(dir);
+    const keyPath = join(dir, "bakingrl-signing-key.json");
+    execFileSync(process.execPath, [cli, "keygen", keyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    execFileSync(process.execPath, [cli, "pack", dir, "--sign", keyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const bundlePath = join(dir, "dist-bundles/com.example.package-1.0.0.brlp");
+    markZipEntryAsUnixSymlink(bundlePath, "marketplace/listing.json");
+    const output = runCliFailure([
+      "prepare-submission",
+      dir,
+      "--developer",
+      "example",
+      "--bundle-url",
+      "https://github.com/example/package/releases/download/v1.0.0/com.example.package-1.0.0.brlp",
+      "--listing-url",
+      "https://raw.githubusercontent.com/example/package/v1.0.0/marketplace/listing.json"
+    ]);
+    assert.match(output, /Bundle ZIP must not contain symbolic links: 'marketplace\/listing\.json'/);
+  });
+});
+
+test("submission command rejects implicit ZIP directory case and kind collisions", () => {
+  for (const fixture of [
+    {
+      files: [["assets/Foo", "file\n"], ["assets/baz/bar.js", "nested\n"]],
+      from: "assets/baz/bar.js",
+      to: "assets/foo/bar.js"
+    },
+    {
+      files: [["assets/Foo/a.js", "first\n"], ["assets/bar/b.js", "second\n"]],
+      from: "assets/bar/b.js",
+      to: "assets/foo/b.js"
     }
-  }), (dir) => {
-    writeGeneratedEntry(dir, "dist/extension/index.js");
-    execFileSync(process.execPath, [cli.pathname, "pack", dir], {
+  ]) {
+    withPackage(baseManifest(), (dir) => {
+      writeAuthorListing(dir);
+      for (const [relativePath, contents] of fixture.files) writeTextEntry(dir, relativePath, contents);
+      const keyPath = join(dir, "bakingrl-signing-key.json");
+      execFileSync(process.execPath, [cli, "keygen", keyPath], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      execFileSync(process.execPath, [cli, "pack", dir, "--sign", keyPath], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      const bundlePath = join(dir, "dist-bundles/com.example.package-1.0.0.brlp");
+      renameZipEntrySameLength(bundlePath, fixture.from, fixture.to);
+      const output = runCliFailure([
+        "prepare-submission",
+        dir,
+        "--developer",
+        "example",
+        "--bundle-url",
+        "https://github.com/example/package/releases/download/v1.0.0/com.example.package-1.0.0.brlp",
+        "--listing-url",
+        "https://raw.githubusercontent.com/example/package/v1.0.0/marketplace/listing.json"
+      ]);
+      assert.match(output, /Installable package paths collide on Windows/);
+    });
+  }
+});
+
+test("validator requires ESM package metadata for Node runtimes", () => {
+  const missingOutput = validatePackageFailure(nodeRuntimeManifest(), (dir) => {
+    writeTextEntry(dir, "dist/extension/index.js", "export function activate() {}\n");
+  });
+  assert.match(missingOutput, /must include a package\.json file with type set to module/);
+
+  const commonJsOutput = validatePackageFailure(nodeRuntimeManifest(), (dir) => {
+    writeJsonEntry(dir, "package.json", { type: "commonjs" });
+    writeTextEntry(dir, "dist/extension/index.js", "export function activate() {}\n");
+  });
+  assert.match(commonJsOutput, /must set package\.json "type" to "module"/);
+});
+
+test("pack preflight rejects invalid Node entry syntax", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, "export function activate( {\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /Node runtime static preflight failed/);
+    assert.match(output, /SyntaxError/);
+    assert.equal(existsSync(join(dir, "manifest.hashes.json")), false);
+  });
+});
+
+test("pack preflight rejects a missing relative import", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'import "\.\/missing-chunk.js";\nexport function activate() {}\n');
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /Node runtime static preflight failed/);
+    assert.match(output, /does not resolve to an installable file/);
+    assert.match(output, /missing-chunk\.js/);
+  });
+});
+
+test("pack preflight validates named and default import bindings", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import { missing } from "./chunk.js";\nexport function activate() { return missing; }\n'
+    );
+    writeTextEntry(dir, "dist/extension/chunk.js", "export const available = 1;\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /named import.*requests missing export 'missing'/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import missing from "./chunk.js";\nexport function activate() { return missing; }\n'
+    );
+    writeTextEntry(dir, "dist/extension/chunk.js", "export const available = 1;\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /default import.*requests missing default export/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import present from "./chunk.js";\nexport function activate() { return present; }\n'
+    );
+    writeTextEntry(dir, "dist/extension/chunk.js", "export default function present() {}\n");
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  });
+});
+
+test("pack preflight validates named re-export bindings", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'export { missing } from "./chunk.js";\nexport function activate() {}\n'
+    );
+    writeTextEntry(dir, "dist/extension/chunk.js", "export const available = 1;\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /named re-export.*requests missing export 'missing'/);
+  });
+});
+
+test("pack preflight validates Node built-in import and re-export bindings", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import fs, { readFileSync } from "fs";\nexport function activate() { return [fs, readFileSync]; }\n'
+    );
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import { definitelyMissing } from "node:fs";\nexport function activate() { return definitelyMissing; }\n'
+    );
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /named import.*node:fs.*requests missing export 'definitelyMissing'/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export { definitelyMissing as activate } from "node:fs";\n');
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /named re-export.*node:fs.*requests missing export 'definitelyMissing'/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export { constants as activate } from "node:fs";\n');
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /activate export is statically non-callable/);
+  });
+});
+
+test("pack preflight detects ambiguous export-star bindings", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export * from "./first.js";\nexport * from "./second.js";\n');
+    writeTextEntry(dir, "dist/extension/first.js", "export function activate() {}\n");
+    writeTextEntry(dir, "dist/extension/second.js", "export function activate() {}\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /activate export is ambiguous across export-star declarations/);
+  });
+});
+
+test("pack preflight preserves valid namespace and same-origin export-star semantics", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import * as helpers from "./chunk.js";\nexport function activate() { return helpers; }\n'
+    );
+    writeTextEntry(dir, "dist/extension/chunk.js", "export const available = 1;\n");
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export * from "./origin.js";\nexport * from "./relay.js";\n');
+    writeTextEntry(dir, "dist/extension/origin.js", "export function activate() {}\n");
+    writeTextEntry(dir, "dist/extension/relay.js", 'export { activate } from "./origin.js";\n');
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export * from "./cycle-a.js";\n');
+    writeTextEntry(dir, "dist/extension/cycle-a.js", 'export * from "./cycle-b.js";\n');
+    writeTextEntry(
+      dir,
+      "dist/extension/cycle-b.js",
+      'export * from "./cycle-a.js";\nexport function activate() {}\n'
+    );
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  });
+});
+
+test("pack preflight rejects package-local module query strings and fragments", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'import "./chunk.js?variant=one";\nexport function activate() {}\n');
+    writeTextEntry(dir, "dist/extension/chunk.js", "export {};\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /query strings and fragments are not supported/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export async function activate() { return import("./chunk.js#variant"); }\n');
+    writeTextEntry(dir, "dist/extension/chunk.js", "export {};\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /query strings and fragments are not supported/);
+  });
+});
+
+test("pack preflight rejects module extensions unsupported by the Node ESM runtime", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'import "./config.JSON";\nexport function activate() {}\n');
+    writeTextEntry(dir, "dist/extension/config.JSON", '{"enabled":true}\n');
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /unsupported extension '\.JSON'/);
+  });
+});
+
+test("pack preflight does not resolve bare imports from a parent node_modules", () => {
+  withTempDir((root) => {
+    const dir = join(root, "plugin");
+    mkdirSync(dir, { recursive: true });
+    writeJsonEntry(dir, "bakingrl.plugin.json", nodeRuntimeManifest());
+    writeNodePackage(
+      dir,
+      'import { value } from "masked-dependency";\nexport function activate() { return value; }\n'
+    );
+    writeJsonEntry(root, "node_modules/masked-dependency/package.json", {
+      name: "masked-dependency",
+      version: "1.0.0",
+      type: "module",
+      exports: "./index.js"
+    });
+    writeTextEntry(root, "node_modules/masked-dependency/index.js", "export const value = 42;\n");
+
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /Node runtime static preflight failed/);
+    assert.match(output, /masked-dependency/);
+    assert.match(output, /external bare dependency/);
+  });
+});
+
+test("pack preflight follows literal dynamic imports without executing them", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'export async function activate() { await import("./missing-dynamic.js"); }\n'
+    );
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /dynamic import '\.\/missing-dynamic\.js'/);
+    assert.match(output, /does not resolve to an installable file/);
+  });
+});
+
+test("pack preflight rejects non-literal dynamic imports", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'export async function activate(name) { await import(`./${name}.js`); }\n'
+    );
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /dynamic import.*must use a string literal/);
+  });
+});
+
+test("pack preflight requires an activate export", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, "export function deactivate() {}\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /runtime\.node\.entry must statically export activate\(context\)/);
+  });
+});
+
+test("pack preflight rejects missing and statically non-callable activate bindings", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, "export { activate };\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /Export 'activate' is not defined|Export 'activate' is not defined in module/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, "export const activate = 1;\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /activate export is statically non-callable/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      "export const activate = 1;\nfunction nested() { function activate() {} return activate; }\n"
+    );
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /activate export is statically non-callable/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export { activate } from "./chunk.js";\n');
+    writeTextEntry(dir, "dist/extension/chunk.js", "export function somethingElse() {}\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /named re-export.*requests missing export 'activate'/);
+  });
+});
+
+test("pack preflight follows re-exported default activation objects and their callability", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export { default } from "./chunk.js";\n');
+    writeTextEntry(
+      dir,
+      "dist/extension/chunk.js",
+      "export default { activate() {}, deactivate() {} };\n"
+    );
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export { default as activate } from "./chunk.js";\n');
+    writeTextEntry(dir, "dist/extension/chunk.js", "export default 1;\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /activate export is statically non-callable/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'export { default } from "./chunk.js";\n');
+    writeTextEntry(dir, "dist/extension/chunk.js", "export default { activate: 1 };\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /activate export is statically non-callable/);
+  });
+});
+
+test("pack preflight validates JSON imports and their required attributes", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import config from "./config.json" with { type: "json" };\nexport function activate() { return config; }\n'
+    );
+    writeJsonEntry(dir, "dist/extension/config.json", { enabled: true });
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, 'import config from "./config.json";\nexport function activate() { return config; }\n');
+    writeJsonEntry(dir, "dist/extension/config.json", { enabled: true });
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /must declare import attributes with \{ type: "json" \}/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import config from "./config.json" with { type: "json", extra: "invalid" };\n' +
+        "export function activate() { return config; }\n"
+    );
+    writeJsonEntry(dir, "dist/extension/config.json", { enabled: true });
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /must declare import attributes with \{ type: "json" \} exactly/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import chunk from "./chunk.js" with { type: "json" };\nexport function activate() { return chunk; }\n'
+    );
+    writeTextEntry(dir, "dist/extension/chunk.js", "export default {};\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /must not declare import attributes.*only for JSON modules/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'import fs from "node:fs" with { type: "json" };\nexport function activate() { return fs; }\n'
+    );
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /must not declare import attributes.*only for JSON modules/);
+  });
+
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(
+      dir,
+      'export async function activate() { return import("./config.json", { with: { type: "json", extra: "invalid" } }); }\n'
+    );
+    writeJsonEntry(dir, "dist/extension/config.json", { enabled: true });
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /must declare import attributes with \{ type: "json" \} exactly/);
+  });
+});
+
+test("doctor static preflight never evaluates plugin top-level code", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    const marker = join(dir, "preflight-must-not-run.txt");
+    writeNodePackage(
+      dir,
+      `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(marker)}, "executed");\nexport function activate() {}\n`
+    );
+    execFileSync(process.execPath, [cli, "doctor", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    assert.equal(existsSync(marker), false);
+  });
+});
+
+test("doctor reports the staged Node runtime preflight", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    const output = execFileSync(process.execPath, [cli, "doctor", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const summary = JSON.parse(output);
+    assert.equal(summary.checks.nodeRuntimePreflight, true);
+    assert.equal(summary.nodeRuntime.status, "passed");
+    assert.equal(summary.nodeRuntime.mode, "static");
+    assert.equal(summary.nodeRuntime.entry, "dist/extension/index.js");
+    assert.equal(summary.nodeRuntime.nodeVersion, process.version);
+    assert.deepEqual(summary.nodeRuntime.modules, ["dist/extension/index.js"]);
+    assert.deepEqual(summary.nodeRuntime.exports, ["activate", "deactivate"]);
+  });
+});
+
+test("install-local stages only bundle-eligible files and replaces after preflight", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    writeTextEntry(dir, "node_modules/dev-only/index.js", "export {};\n");
+    writeTextEntry(dir, ".git/HEAD", "ref: refs/heads/main\n");
+    writeTextEntry(dir, "dist-bundles/old.brlp", "old bundle\n");
+
+    withTempDir((packagesDir) => {
+      const target = join(packagesDir, "com.example.package");
+      writeTextEntry(target, "old-install.txt", "old\n");
+      execFileSync(process.execPath, [cli, "install-local", dir], {
+        env: { ...process.env, BAKINGRL_PACKAGES_DIR: packagesDir },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+
+      assert.ok(existsSync(join(target, "bakingrl.plugin.json")));
+      assert.ok(existsSync(join(target, "package.json")));
+      assert.ok(existsSync(join(target, "dist/extension/index.js")));
+      assert.equal(existsSync(join(target, "old-install.txt")), false);
+      assert.equal(existsSync(join(target, "node_modules")), false);
+      assert.equal(existsSync(join(target, ".git")), false);
+      assert.equal(existsSync(join(target, "dist-bundles")), false);
+    });
+  });
+});
+
+test("install-local keeps the previous package when staged preflight fails", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, "export function deactivate() {}\n");
+    withTempDir((packagesDir) => {
+      const target = join(packagesDir, "com.example.package");
+      writeTextEntry(target, "old-install.txt", "keep me\n");
+
+      const output = runCliFailure(["install-local", dir], {
+        env: { ...process.env, BAKINGRL_PACKAGES_DIR: packagesDir }
+      });
+      assert.match(output, /Failed to install package locally: Node runtime static preflight failed/);
+      assert.equal(readFileSync(join(target, "old-install.txt"), "utf8"), "keep me\n");
+    });
+  });
+});
+
+test("pack accepts an explicit package directory without signing", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    execFileSync(process.execPath, [cli, "pack", dir], {
       cwd: tmpdir(),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     });
     assert.ok(existsSync(join(dir, "manifest.hashes.json")));
     assert.ok(existsSync(join(dir, "dist-bundles", "com.example.package-1.0.0.brlp")));
+  });
+});
+
+test("pack and installable staging exclude environment files and private signing keys", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    writeTextEntry(dir, ".env", "SECRET=one\n");
+    writeTextEntry(dir, ".env.local", "SECRET=two\n");
+    writeTextEntry(dir, "secrets/bakingrl-signing-key.json", '{"privateKeyPem":"secret"}\n');
+    writeTextEntry(dir, "secrets/id_ed25519", "private key\n");
+
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    const hashes = readJson(join(dir, "manifest.hashes.json"));
+    assert.equal(Object.hasOwn(hashes.files, ".env"), false);
+    assert.equal(Object.hasOwn(hashes.files, ".env.local"), false);
+    assert.equal(Object.hasOwn(hashes.files, "secrets/bakingrl-signing-key.json"), false);
+    assert.equal(Object.hasOwn(hashes.files, "secrets/id_ed25519"), false);
+
+    const bundlePath = join(dir, "dist-bundles/com.example.package-1.0.0.brlp");
+    const entries = readZipEntryNames(bundlePath);
+    assert.equal(entries.includes(".env"), false);
+    assert.equal(entries.includes(".env.local"), false);
+    assert.equal(entries.includes("secrets/bakingrl-signing-key.json"), false);
+    assert.equal(entries.includes("secrets/id_ed25519"), false);
+    assert.equal(entries.includes("manifest.hashes.json"), true);
+    assert.equal(entries.includes("signature.ed25519"), false);
+  });
+});
+
+test("pack enforces host extraction size limits before staging file contents", () => {
+  withPackage(baseManifest(), (dir) => {
+    const oversizedPath = join(dir, "assets/oversized.bin");
+    writeTextEntry(dir, "assets/oversized.bin", "");
+    truncateSync(oversizedPath, 25 * 1024 * 1024 + 1);
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /file exceeds 26214400 bytes: assets\/oversized\.bin/);
+  });
+
+  withPackage(baseManifest(), (dir) => {
+    for (let index = 0; index < 6; index += 1) {
+      const relativePath = `assets/chunk-${index}.bin`;
+      writeTextEntry(dir, relativePath, "");
+      truncateSync(join(dir, relativePath), 25 * 1024 * 1024 - 1024);
+    }
+    writeTextEntry(dir, "assets/overflow.bin", "");
+    truncateSync(join(dir, "assets/overflow.bin"), 8192);
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /package exceeds 157286400 uncompressed bytes/);
+  });
+});
+
+test("pack archives the validated staging snapshot when the source changes concurrently", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "bakingrl-sdk-snapshot-"));
+  const originalEntry = "export function activate() { return 'staged'; }\n";
+  const mutatedEntry = "export function activate() { return 'mutated'; }\n";
+  const markerName = "zzzz-snapshot-copy-complete.marker";
+  let child;
+  try {
+    writeJsonEntry(dir, "bakingrl.plugin.json", nodeRuntimeManifest());
+    writeNodePackage(dir, originalEntry);
+    writeTextEntry(dir, markerName, "snapshot marker\n");
+    const previousStagingDirs = new Set(
+      readdirSync(tmpdir()).filter((entry) => entry.startsWith("bakingrl-plugin-pack-"))
+    );
+
+    child = spawn(process.execPath, [cli, "pack", dir], {
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+
+    await waitForValue(() => {
+      for (const entry of readdirSync(tmpdir())) {
+        if (!entry.startsWith("bakingrl-plugin-pack-") || previousStagingDirs.has(entry)) continue;
+        const candidate = join(tmpdir(), entry);
+        if (existsSync(join(candidate, markerName))) return candidate;
+      }
+      return null;
+    });
+    writeTextEntry(dir, "dist/extension/index.js", mutatedEntry);
+
+    const result = await waitForChild(child);
+    assert.equal(result.code, 0, `${stdout}\n${stderr}`);
+    const hashes = readJson(join(dir, "manifest.hashes.json"));
+    const originalHash = createHash("sha256").update(originalEntry).digest("hex");
+    assert.equal(hashes.files["dist/extension/index.js"], originalHash);
+    const bundlePath = join(dir, "dist-bundles/com.example.package-1.0.0.brlp");
+    assert.equal(readZipEntry(bundlePath, "dist/extension/index.js").toString("utf8"), originalEntry);
+  } finally {
+    if (child?.exitCode === null) child.kill();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("pack replaces generated hash artifacts on repeated runs", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, "export function activate() { return 1; }\n");
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const firstHashes = readFileSync(join(dir, "manifest.hashes.json"), "utf8");
+    writeTextEntry(dir, "dist/extension/index.js", "export function activate() { return 2; }\n");
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    assert.notEqual(readFileSync(join(dir, "manifest.hashes.json"), "utf8"), firstHashes);
+  });
+});
+
+test("pack rolls back generated artifacts when atomic bundle publication fails", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir, "export function activate() { return 1; }\n");
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const previousHashes = readFileSync(join(dir, "manifest.hashes.json"));
+    const bundlePath = join(dir, "dist-bundles/com.example.package-1.0.0.brlp");
+    rmSync(bundlePath, { force: true });
+    mkdirSync(bundlePath);
+    writeTextEntry(dir, "dist/extension/index.js", "export function activate() { return 2; }\n");
+
+    runCliFailure(["pack", dir]);
+    assert.deepEqual(readFileSync(join(dir, "manifest.hashes.json")), previousHashes);
+    assert.equal(readdirSync(join(dir, "dist-bundles")).some((name) => name.includes(".tmp-")), false);
+  });
+});
+
+test("sign and signed pack publish staged artifacts without including the private key", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    const keyPath = join(dir, "bakingrl-signing-key.json");
+    execFileSync(process.execPath, [cli, "keygen", keyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    execFileSync(process.execPath, [cli, "sign", "--key", keyPath, dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    assert.ok(existsSync(join(dir, "manifest.hashes.json")));
+    assert.ok(existsSync(join(dir, "signature.ed25519")));
+    assert.equal(Object.hasOwn(readJson(join(dir, "manifest.hashes.json")).files, "bakingrl-signing-key.json"), false);
+
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const entries = readZipEntryNames(join(dir, "dist-bundles/com.example.package-1.0.0.brlp"));
+    assert.equal(entries.includes("bakingrl-signing-key.json"), false);
+    assert.equal(entries.includes("manifest.hashes.json"), true);
+    assert.equal(entries.includes("signature.ed25519"), true);
+  });
+});
+
+test("unsigned pack rejects a stale existing signature", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    const keyPath = join(dir, "bakingrl-signing-key.json");
+    execFileSync(process.execPath, [cli, "keygen", keyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    execFileSync(process.execPath, [cli, "sign", "--key", keyPath, dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    writeTextEntry(dir, "dist/extension/index.js", "export function activate() { return 'changed'; }\n");
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /does not match package hashes.*re-sign the package or delete the signature/);
+    assert.equal(existsSync(join(dir, "dist-bundles/com.example.package-1.0.0.brlp")), false);
+  });
+});
+
+test("signed pack rejects a public key that does not match the private key", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    const firstKeyPath = join(dir, "first-signing-key.json");
+    const secondKeyPath = join(dir, "second-signing-key.json");
+    execFileSync(process.execPath, [cli, "keygen", firstKeyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    execFileSync(process.execPath, [cli, "keygen", secondKeyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const firstKey = readJson(firstKeyPath);
+    const secondKey = readJson(secondKeyPath);
+    const mixedKeyPath = join(dir, "mixed-signing-key.json");
+    writeJsonEntry(dir, "mixed-signing-key.json", {
+      ...firstKey,
+      privateKeyPem: secondKey.privateKeyPem
+    });
+
+    const output = runCliFailure(["pack", dir, "--sign", mixedKeyPath]);
+    assert.match(output, /publicKey does not match privateKeyPem/);
+    assert.equal(existsSync(join(dir, "manifest.hashes.json")), false);
+    assert.equal(existsSync(join(dir, "signature.ed25519")), false);
+    assert.equal(existsSync(join(dir, "dist-bundles/com.example.package-1.0.0.brlp")), false);
+  });
+});
+
+test("installable staging excludes reserved directories regardless of case", () => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    writeTextEntry(dir, "Node_Modules/private-dependency/index.js", "export const secret = true;\n");
+    writeTextEntry(dir, ".GiT/config", "credential = must-not-ship\n");
+    writeTextEntry(dir, "Dist-Bundles/old.brlp", "nested bundle\n");
+    execFileSync(process.execPath, [cli, "pack", dir], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const entries = readZipEntryNames(join(dir, "dist-bundles/com.example.package-1.0.0.brlp"));
+    assert.equal(entries.some((entry) => entry.toLowerCase().startsWith("node_modules/")), false);
+    assert.equal(entries.some((entry) => entry.toLowerCase().startsWith(".git/")), false);
+    assert.equal(entries.some((entry) => entry.toLowerCase().startsWith("dist-bundles/")), false);
+  });
+});
+
+test("pack rejects installable paths that collide under Windows case folding", (t) => {
+  withPackage(nodeRuntimeManifest({
+    runtime: {
+      node: {
+        entry: "dist/extension/Index.js"
+      }
+    }
+  }), (dir) => {
+    writeJsonEntry(dir, "package.json", { type: "module" });
+    writeTextEntry(dir, "dist/extension/Index.js", "export function activate() { return 'validated'; }\n");
+    writeTextEntry(dir, "dist/extension/index.js", "export function activate() { return 'overwrite'; }\n");
+    const names = readdirSync(join(dir, "dist/extension"));
+    if (names.length < 2) {
+      t.skip("Filesystem is case-insensitive and cannot represent the collision fixture");
+      return;
+    }
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /paths collide on Windows.*Index\.js.*index\.js/);
+    assert.equal(existsSync(join(dir, "manifest.hashes.json")), false);
+    assert.equal(existsSync(join(dir, "dist-bundles/com.example.package-1.0.0.brlp")), false);
+  });
+});
+
+test("pack uses Windows uppercase folding for Unicode path collisions", (t) => {
+  let representedFixtures = 0;
+  for (const [first, second] of [["σ.js", "ς.js"], ["É.js", "é.js"]]) {
+    withPackage(baseManifest(), (dir) => {
+      writeTextEntry(dir, `assets/${first}`, "first\n");
+      writeTextEntry(dir, `assets/${second}`, "second\n");
+      if (readdirSync(join(dir, "assets")).length < 2) return;
+      representedFixtures += 1;
+      const output = runCliFailure(["pack", dir]);
+      assert.match(output, /paths collide on Windows/);
+    });
+  }
+  if (representedFixtures === 0) t.skip("Filesystem cannot represent Unicode case-fold collision fixtures");
+});
+
+test("pack rejects non-canonical casing for reserved package artifacts", () => {
+  for (const artifact of ["Manifest.Hashes.json", "Signature.Ed25519"]) {
+    withPackage(nodeRuntimeManifest(), (dir) => {
+      writeNodePackage(dir);
+      writeTextEntry(dir, artifact, "reserved artifact variant\n");
+      const output = runCliFailure(["pack", dir]);
+      assert.match(output, /artifact must use canonical casing/);
+      assert.match(output, new RegExp(artifact.toLowerCase().replaceAll(".", "\\.")));
+    });
+  }
+});
+
+test("pack rejects Windows device names including superscript COM and LPT variants", (t) => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    try {
+      writeTextEntry(dir, "assets/COM¹.txt", "reserved Windows device path\n");
+    } catch (error) {
+      if (["EACCES", "EINVAL", "EPERM"].includes(error?.code)) {
+        t.skip(`Filesystem cannot represent the Windows device fixture: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+    const output = runCliFailure(["pack", dir]);
+    assert.match(output, /path is not Windows-portable: 'assets\/COM¹\.txt'/);
+  });
+});
+
+test("package commands reject manifest and package metadata symlinks before reading their targets", (t) => {
+  withTempDir((root) => {
+    const packagesDir = join(root, "installed-packages");
+    const invalidTarget = join(root, "external-invalid.json");
+    writeFileSync(invalidTarget, "not valid JSON\n");
+    const commands = ["validate", "doctor", "pack", "install-local"];
+
+    const manifestLinkPackage = join(root, "manifest-link-package");
+    mkdirSync(manifestLinkPackage, { recursive: true });
+    writeNodePackage(manifestLinkPackage);
+    try {
+      symlinkSync(invalidTarget, join(manifestLinkPackage, "bakingrl.plugin.json"), "file");
+    } catch (error) {
+      if (["EACCES", "EPERM", "ENOTSUP"].includes(error?.code)) {
+        t.skip(`Symbolic links are not permitted on this platform: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+    for (const command of commands) {
+      const output = runCliFailure([command, manifestLinkPackage], {
+        env: { ...process.env, BAKINGRL_PACKAGES_DIR: packagesDir }
+      });
+      assert.match(output, /symbolic links: bakingrl\.plugin\.json/);
+      assert.doesNotMatch(output, /Unable to read valid JSON/);
+    }
+
+    const packageJsonLinkPackage = join(root, "package-json-link-package");
+    mkdirSync(packageJsonLinkPackage, { recursive: true });
+    writeJsonEntry(packageJsonLinkPackage, "bakingrl.plugin.json", nodeRuntimeManifest());
+    writeTextEntry(packageJsonLinkPackage, "dist/extension/index.js", "export function activate() {}\n");
+    symlinkSync(invalidTarget, join(packageJsonLinkPackage, "package.json"), "file");
+    for (const command of commands) {
+      const output = runCliFailure([command, packageJsonLinkPackage], {
+        env: { ...process.env, BAKINGRL_PACKAGES_DIR: packagesDir }
+      });
+      assert.match(output, /symbolic links: package\.json/);
+      assert.doesNotMatch(output, /Unable to read valid JSON/);
+    }
+  });
+});
+
+test("validator rejects a symbolic-link package root", (t) => {
+  withTempDir((root) => {
+    const packageDir = join(root, "real-package");
+    mkdirSync(packageDir, { recursive: true });
+    writeJsonEntry(packageDir, "bakingrl.plugin.json", nodeRuntimeManifest());
+    writeNodePackage(packageDir);
+    const linkedPackageDir = join(root, "linked-package");
+    try {
+      symlinkSync(packageDir, linkedPackageDir, "dir");
+    } catch (error) {
+      if (["EACCES", "EPERM", "ENOTSUP"].includes(error?.code)) {
+        t.skip(`Symbolic links are not permitted on this platform: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+    const output = runCliFailure(["validate", linkedPackageDir]);
+    assert.match(output, /Package directory must not be a symbolic link/);
+  });
+});
+
+test("pack excludes an explicitly passed signing key with different path casing", (t) => {
+  withPackage(nodeRuntimeManifest(), (dir) => {
+    writeNodePackage(dir);
+    const actualKeyPath = join(dir, "SigningMaterial.JSON");
+    execFileSync(process.execPath, [cli, "keygen", actualKeyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const differentlyCasedKeyPath = join(dir, "signingmaterial.json");
+    if (!existsSync(differentlyCasedKeyPath)) {
+      t.skip("Filesystem is case-sensitive and cannot resolve the alternate key casing");
+      return;
+    }
+    execFileSync(process.execPath, [cli, "pack", dir, "--sign", differentlyCasedKeyPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const entries = readZipEntryNames(join(dir, "dist-bundles/com.example.package-1.0.0.brlp"));
+    assert.equal(entries.some((entry) => entry.toLowerCase() === "signingmaterial.json"), false);
+    const hashes = readJson(join(dir, "manifest.hashes.json"));
+    assert.equal(Object.keys(hashes.files).some((entry) => entry.toLowerCase() === "signingmaterial.json"), false);
+  });
+});
+
+test("pack rejects package symlinks without reading or archiving their external targets", (t) => {
+  withTempDir((root) => {
+    const packageDir = join(root, "plugin");
+    mkdirSync(packageDir, { recursive: true });
+    writeJsonEntry(packageDir, "bakingrl.plugin.json", nodeRuntimeManifest());
+    writeNodePackage(packageDir);
+    const externalSecret = join(root, "external-secret.txt");
+    writeFileSync(externalSecret, "must stay outside the package\n");
+    try {
+      symlinkSync(externalSecret, join(packageDir, "linked-secret.txt"), "file");
+    } catch (error) {
+      if (["EACCES", "EPERM", "ENOTSUP"].includes(error?.code)) {
+        t.skip(`Symbolic links are not permitted on this platform: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+
+    const output = runCliFailure(["pack", packageDir]);
+    assert.match(output, /must not contain symbolic links: linked-secret\.txt/);
+    assert.equal(existsSync(join(packageDir, "manifest.hashes.json")), false);
+    assert.equal(existsSync(join(packageDir, "dist-bundles/com.example.package-1.0.0.brlp")), false);
+    assert.equal(readFileSync(externalSecret, "utf8"), "must stay outside the package\n");
   });
 });
 
@@ -782,4 +1778,85 @@ test("scaffolder creates valid runtime 2.3 package templates", () => {
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function readZipEntryNames(path) {
+  const archive = readFileSync(path);
+  const signature = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+  const entries = [];
+  let offset = archive.indexOf(signature);
+  while (offset !== -1) {
+    const nameLength = archive.readUInt16LE(offset + 28);
+    const extraLength = archive.readUInt16LE(offset + 30);
+    const commentLength = archive.readUInt16LE(offset + 32);
+    entries.push(archive.subarray(offset + 46, offset + 46 + nameLength).toString("utf8"));
+    offset = archive.indexOf(signature, offset + 46 + nameLength + extraLength + commentLength);
+  }
+  return entries;
+}
+
+function readZipEntry(path, expectedName) {
+  const archive = readFileSync(path);
+  const signature = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+  let offset = archive.indexOf(signature);
+  while (offset !== -1) {
+    const compressedSize = archive.readUInt32LE(offset + 20);
+    const nameLength = archive.readUInt16LE(offset + 28);
+    const extraLength = archive.readUInt16LE(offset + 30);
+    const commentLength = archive.readUInt16LE(offset + 32);
+    const name = archive.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
+    if (name === expectedName) {
+      const localOffset = archive.readUInt32LE(offset + 42);
+      const localNameLength = archive.readUInt16LE(localOffset + 26);
+      const localExtraLength = archive.readUInt16LE(localOffset + 28);
+      const contentsOffset = localOffset + 30 + localNameLength + localExtraLength;
+      return inflateRawSync(archive.subarray(contentsOffset, contentsOffset + compressedSize));
+    }
+    offset = archive.indexOf(signature, offset + 46 + nameLength + extraLength + commentLength);
+  }
+  throw new Error(`Missing ZIP entry: ${expectedName}`);
+}
+
+function markZipEntryAsUnixSymlink(path, expectedName) {
+  const archive = readFileSync(path);
+  const signature = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+  let offset = archive.indexOf(signature);
+  while (offset !== -1) {
+    const nameLength = archive.readUInt16LE(offset + 28);
+    const extraLength = archive.readUInt16LE(offset + 30);
+    const commentLength = archive.readUInt16LE(offset + 32);
+    const name = archive.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
+    if (name === expectedName) {
+      archive.writeUInt16LE((3 << 8) | 20, offset + 4);
+      archive.writeUInt32LE((0o120777 << 16) >>> 0, offset + 38);
+      writeFileSync(path, archive);
+      return;
+    }
+    offset = archive.indexOf(signature, offset + 46 + nameLength + extraLength + commentLength);
+  }
+  throw new Error(`Missing ZIP entry: ${expectedName}`);
+}
+
+function renameZipEntrySameLength(path, expectedName, replacementName) {
+  const expected = Buffer.from(expectedName, "utf8");
+  const replacement = Buffer.from(replacementName, "utf8");
+  assert.equal(replacement.length, expected.length, "ZIP fixture names must have the same encoded length");
+  const archive = readFileSync(path);
+  const signature = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+  let offset = archive.indexOf(signature);
+  while (offset !== -1) {
+    const nameLength = archive.readUInt16LE(offset + 28);
+    const extraLength = archive.readUInt16LE(offset + 30);
+    const commentLength = archive.readUInt16LE(offset + 32);
+    const name = archive.subarray(offset + 46, offset + 46 + nameLength);
+    if (name.equals(expected)) {
+      const localOffset = archive.readUInt32LE(offset + 42);
+      replacement.copy(archive, offset + 46);
+      replacement.copy(archive, localOffset + 30);
+      writeFileSync(path, archive);
+      return;
+    }
+    offset = archive.indexOf(signature, offset + 46 + nameLength + extraLength + commentLength);
+  }
+  throw new Error(`Missing ZIP entry: ${expectedName}`);
 }

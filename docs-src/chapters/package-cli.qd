@@ -50,6 +50,8 @@ Validation checks:
 - relative storage paths without URI prefixes, absolute paths, `..`, or
   backslashes;
 - built JavaScript entries for extension host and declared webviews;
+- a package-local `package.json` with `type: "module"` whenever
+  `runtime.node` is declared;
 - complete `surface` webviews with immutable capability declarations;
 - sidecar command paths and `jsonrpc-stdio` declarations;
 - sidecar health-check declarations when present;
@@ -67,14 +69,37 @@ Current validation accepts `contributes.extensionPoints`,
 matching top-level dependency. Runtime API validation accepts manifests in the
 `2.3.x` window, with `2.3.0` as the minimum, and rejects every other target.
 
+`doctor`, `pack`, and `install-local` add a static Node runtime preflight. They
+copy only bundle-eligible files to an isolated staging directory, syntax-check
+every JavaScript module without evaluating it, and follow static imports,
+export-from declarations, and literal dynamic imports. The entry must expose
+`activate(context)`. Node built-ins are accepted, while external bare imports
+are rejected because release packages do not contain `node_modules/`. JSON
+modules require `with { type: "json" }`, and non-literal dynamic imports are
+rejected because their installable target cannot be proven. Import attributes
+are accepted only for JSON and cannot contain extra keys; package-local module
+specifiers cannot contain query strings or fragments. The preflight never
+imports the plugin or runs its top-level code.
+
+Installable package trees cannot contain symbolic links, including a symbolic
+link used as the package root, manifest, package metadata, runtime entry, or
+asset. Reserved source directories such as `.git/`, `node_modules/`, and
+`dist-bundles/` are excluded case-insensitively so Windows path casing cannot
+make them part of an artifact. All remaining file and directory paths must be
+Windows-portable and unique under portable Unicode/case normalization;
+case-only collisions and non-canonical spellings of package control artifacts
+are rejected. The same extraction limits as the host apply before packaging:
+at most 25 MiB per file and 150 MiB uncompressed for the package.
+
 ## Doctor
 
 ```sh
 bakingrl-plugin doctor .
 ```
 
-`doctor` prints a JSON summary of `bakingrlApi`, permissions, dependencies, sidecars,
-contribution ids, resources, webviews, and build entries.
+`doctor` prints a JSON summary of `bakingrlApi`, permissions, dependencies,
+sidecars, contribution ids, resources, webviews, build entries, and the staged
+Node runtime preflight.
 
 ## Inspect
 
@@ -104,8 +129,18 @@ npm run build
 bakingrl-plugin pack .
 ```
 
-`pack` validates the package, writes `manifest.hashes.json`, and creates a
-`.brlp` bundle in `dist-bundles/`.
+`pack` validates and preflights one staged snapshot, then computes
+`manifest.hashes.json`, the optional signature, and the `.brlp` from that same
+snapshot. Source changes made concurrently after staging cannot alter the
+bundle being written to `dist-bundles/`. The final bundle is replaced
+atomically only after generated source artifacts have been published; a failed
+replacement rolls those artifacts back. If an unsigned pack retains an
+existing signature, that signature must still verify against the new staged
+hashes or the command asks you to re-sign or delete it.
+
+Signing key files are validated as an Ed25519 keypair: the declared public key
+must be the one derived from the private PEM before any hashes or signature are
+published.
 
 To sign while packing:
 
@@ -132,9 +167,12 @@ bakingrl-plugin prepare-submission . \
 
 The `bakingrl.marketplace-submission/1` document records the package version,
 Runtime API, author listing location, artifact hash, signing public key, and
-declared permissions. It deliberately contains no review status, approval, or
-`bakingrl.marketplace/2` catalogue structure; those belong to the marketplace
-repository.
+declared permissions. Before emitting it, the CLI reads the exact bundle once,
+verifies its ZIP structure, complete file hashes, Ed25519 signature, manifest,
+and listing against the staged package snapshot, and derives the reported SHA
+and public key from those verified bytes. It deliberately contains no review
+status, approval, or `bakingrl.marketplace/2` catalogue structure; those belong
+to the marketplace repository.
 
 ## Local Install
 
@@ -142,5 +180,9 @@ repository.
 bakingrl-plugin install-local .
 ```
 
-This copies the package into the BakingRL app data package directory. Use it
-after `npm run build` when testing a package in the host app.
+This stages the same bundle-eligible files used by `pack`, runs the Node runtime
+preflight, then replaces the package in the BakingRL app data directory. The
+source `.git/`, `node_modules/`, and `dist-bundles/` directories, `.env` files,
+and standard private signing-key filenames are never copied. Public package
+artifacts such as `manifest.hashes.json` and `signature.ed25519` remain eligible.
+Use it after `npm run build` when testing a package in the host app.

@@ -135,6 +135,18 @@ export const { activate, deactivate } = defineExtension({
 });
 ```
 
+Packages with `runtime.node` must include a package-local `package.json` with
+`"type": "module"`. Runtime dependencies must be bundled into `dist/`; release
+packages do not include the source `node_modules/` directory. Installable
+runtime graphs may use package-local ESM modules and Node built-ins. Literal
+dynamic imports are followed by release validation; computed dynamic imports
+and external bare dependencies are rejected. JSON imports must use
+`with { type: "json" }` without extra attributes; non-JSON imports cannot use
+attributes. Package-local module specifiers cannot contain query strings or
+fragments. The release preflight validates this graph statically and never
+evaluates plugin code. Keep top-level module evaluation side-effect free and
+start long-lived work from `activate(context)`.
+
 The runtime context includes commands, services, bus, registry, storage,
 settings, secrets metadata, webviews, sidecars, telemetry,
 diagnostics, plugin graph discovery, resources, and logger APIs.
@@ -345,6 +357,9 @@ Sidecars are declared in an array:
 
 `bin` is package-relative. `protocol` is currently `jsonrpc-stdio`.
 Activation can be `manual`, `onEnable`, or `onStartup`.
+BakingRL restores the executable permission on declared sidecars for the
+current platform when extracting a package on Unix systems; the bundle does
+not need to rely on ZIP permission metadata.
 When `healthCheck` is declared, `intervalMs` must be at least `500` and
 `timeoutMs` must be at least `100`.
 
@@ -395,6 +410,7 @@ Typical package contents:
 
 ```txt
 bakingrl.plugin.json
+package.json
 dist/
 assets/
 schemas/
