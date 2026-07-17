@@ -5,7 +5,7 @@
 
 The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v4 plugin
 contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/4`,
-SDK `2.3.1`, and `bakingrlApi: "2.3.0"` for new packages.
+SDK `2.3.1`, and `bakingrlApi: "2.4.0"` for new packages.
 
 The SDK is an authoring contract. Runtime behavior is provided by the host:
 package loading, extension host supervision, bridge calls, service routing,
@@ -27,6 +27,7 @@ import {
   createResourceRef,
   type ExtensionContext,
   type PluginManifestV4,
+  type PluginPresentation,
   type PluginPermissions,
   type RenderBundleV1,
   type SurfaceState,
@@ -37,6 +38,11 @@ import {
 
 The root module also re-exports Rocket League telemetry event names and payload
 types from `@bakingrl/plugin-sdk/telemetry`.
+
+`PluginPresentation` contains optional filter categories and an optional primary
+action. Categories are discovery metadata only; they never change runtime,
+permissions, activation, visibility, or navigation. The primary action is an
+independent display hint for an explicit package-list button.
 
 ## Extension Host
 
@@ -296,9 +302,9 @@ approved key ids and statuses. Neither type defines the signed catalogue.
 
 `SDK_VERSION` is `2.3.1`.
 
-`RUNTIME_API_VERSION` and `MIN_SUPPORTED_RUNTIME_API_VERSION` are both `2.3.0`,
-matching the manifest value `bakingrlApi: "2.3.0"` used by new packages. Only
-the `2.3.x` Runtime API window is supported.
+`RUNTIME_API_VERSION` is `2.4.0` and `MIN_SUPPORTED_RUNTIME_API_VERSION` is
+`2.3.0`, matching the manifest value `bakingrlApi: "2.4.0"` used by new
+packages. The `2.3.x` through `2.4.x` Runtime API window is supported.
 
 `setting(settings, key, fallback)` reads a typed value with a fallback.
 

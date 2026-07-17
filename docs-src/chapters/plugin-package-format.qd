@@ -14,7 +14,7 @@ BakingRL packages are described by `bakingrl.plugin.json`. Current packages use
   "id": "com.example.extension",
   "name": "Example Extension",
   "version": "1.0.0",
-  "bakingrlApi": "2.3.0",
+  "bakingrlApi": "2.4.0",
   "permissions": {
     "bus": { "read": [], "publish": [] },
     "registry": { "read": [], "write": [] },
@@ -50,8 +50,8 @@ Must be `bakingrl.plugin/4` for current packages.
 
 `bakingrlApi`
 
-Top-level contract version. New packages declare exact `2.3.0`. The helper CLI
-accepts only `2.3.x`, with `2.3.0` as the minimum supported version. Runtime
+Top-level contract version. New packages declare exact `2.4.0`. The helper CLI
+accepts `2.3.x` through `2.4.x`, with `2.3.0` as the minimum supported version. Runtime
 API 2.2 packages are not accepted.
 
 `id`
@@ -62,6 +62,32 @@ Stable package identity. Use reverse-DNS style values such as
 `name` and `version`
 
 Standard package metadata.
+
+`presentation`
+
+Optional host-facing product metadata introduced in runtime API 2.4. It lets the
+host expose filter metadata and one explicit action without relying on package IDs:
+
+```json
+{
+  "presentation": {
+    "categories": ["layouts", "streaming"],
+    "primaryAction": {
+      "kind": "webview",
+      "target": "studio"
+    }
+  }
+}
+```
+
+`categories` is optional discovery metadata. The host may use these values only
+to search and filter packages; categories never affect activation, permissions,
+visibility, runtime behavior, or navigation. A `webview` primary action must
+reference a declared webview. A `settings` primary action has no target and
+requires `contributes.settings`. The primary action is independent from
+categories and only gives the package list one explicit user-facing action.
+Packages that omit `presentation` remain compatible and use the host's generic
+fallback presentation.
 
 `dependencies`
 

@@ -36,9 +36,10 @@ Generated packages include `scripts/bakingrl-plugin.mjs`, but the global
 and install V4 plugin packages during development.
 
 New packages declare `bakingrlApi` with the current BakingRL runtime API
-(`2.3.0`). The helper validates the current V4 contract and accepts only
-package manifests in the `2.3.x` runtime API window, with `2.3.0` as the
-minimum supported version.
+(`2.4.0`). The helper validates the current V4 contract and accepts package
+manifests in the `2.3.x` through `2.4.x` runtime API window, with `2.3.0` as
+the minimum supported version. Presentation metadata requires
+`bakingrlApi: "2.4.0"` or newer.
 
 Current templates are `extension-plugin`, `native-sidecar-plugin`,
 `platform-plugin`, `contributor-plugin`, and

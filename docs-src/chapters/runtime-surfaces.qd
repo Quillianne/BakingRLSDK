@@ -12,7 +12,7 @@ declarative metadata belongs in `bakingrl.plugin.json`.
 Every current package is described by `bakingrl.plugin.json` with:
 
 - `schemaVersion: "bakingrl.plugin/4"`;
-- `bakingrlApi: "2.3.0"` for new packages;
+- `bakingrlApi: "2.4.0"` for new packages;
 - structured `permissions` for mediated bus, registry, network, and storage
   access;
 - top-level `dependencies` for package-to-package relationships;

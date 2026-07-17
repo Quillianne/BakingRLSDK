@@ -28,7 +28,7 @@ import { deflateRawSync, inflateRawSync } from "node:zlib";
 const require = createRequire(import.meta.url);
 
 const appId = "com.quillianne.bakingrl";
-const runtimeApiVersion = "2.3.0";
+const runtimeApiVersion = "2.4.0";
 const minSupportedRuntimeApiVersion = "2.3.0";
 const allowedTopLevelFields = new Set([
   "schemaVersion",
@@ -37,6 +37,7 @@ const allowedTopLevelFields = new Set([
   "version",
   "author",
   "bakingrlApi",
+  "presentation",
   "permissions",
   "dependencies",
   "runtime",
@@ -54,7 +55,7 @@ const rejectedTopLevelFields = [
   "externalSurfaces"
 ];
 const removedContributeGroups = new Map([
-  ["visuals", "manifest.contributes.visuals is not supported in runtime API 2.3; use webviews for host-opened UI and resources/services/metadata for platform contributions"],
+  ["visuals", "manifest.contributes.visuals is not supported in runtime API 2.4; use webviews for host-opened UI and resources/services/metadata for platform contributions"],
   ["views", "manifest.contributes.views is not supported; use contributes.webviews"],
   ["pages", "manifest.contributes.pages is not supported; use contributes.webviews"],
   ["overlays", "manifest.contributes.overlays is not supported; expose overlay behavior through a platform plugin contract"],
@@ -244,13 +245,73 @@ function validateRuntimeCompatibility(manifest) {
   }
   if (
     declared.major !== current.major ||
-    declared.minor !== current.minor ||
     declared.major !== minimum.major ||
-    declared.minor !== minimum.minor
+    declared.minor < minimum.minor ||
+    declared.minor > current.minor
   ) {
-    fail(`manifest.bakingrlApi must target host runtime API ${current.major}.${current.minor}.x (minimum ${minSupportedRuntimeApiVersion})`);
+    fail(`manifest.bakingrlApi must target host runtime API ${minimum.major}.${minimum.minor}.x through ${current.major}.${current.minor}.x`);
   }
   return declared;
+}
+
+function validatePresentation(manifest, declaredRuntimeApi) {
+  if (manifest.presentation === undefined) return;
+  if (
+    declaredRuntimeApi.major < 2 ||
+    (declaredRuntimeApi.major === 2 && declaredRuntimeApi.minor < 4)
+  ) {
+    fail("manifest.presentation requires manifest.bakingrlApi 2.4.0 or newer");
+  }
+  const presentation = assertPlainObject(manifest.presentation, "manifest.presentation");
+  assertAllowedKeys(
+    presentation,
+    "manifest.presentation",
+    new Set(["categories", "primaryAction"])
+  );
+  if (presentation.categories !== undefined) {
+    const categories = assertStringArray(presentation.categories, "manifest.presentation.categories");
+    const seen = new Set();
+    for (const category of categories) {
+      validateExportName("manifest.presentation.categories[]", category);
+      if (seen.has(category)) {
+        fail(`manifest.presentation.categories contains duplicate category '${category}'`);
+      }
+      seen.add(category);
+    }
+  }
+  if (presentation.primaryAction === undefined) return;
+  const action = assertPlainObject(
+    presentation.primaryAction,
+    "manifest.presentation.primaryAction"
+  );
+  assertAllowedKeys(
+    action,
+    "manifest.presentation.primaryAction",
+    new Set(["kind", "target"])
+  );
+  if (action.kind === "webview") {
+    if (typeof action.target !== "string" || action.target.trim() === "") {
+      fail("manifest.presentation.primaryAction.target is required for kind 'webview'");
+    }
+    const webviews = manifest.contributes?.webviews ?? [];
+    if (!webviews.some((webview) => webview?.id === action.target)) {
+      fail(`manifest.presentation.primaryAction.target references unknown contributes.webviews id '${action.target}'`);
+    }
+    return;
+  }
+  if (action.kind === "settings") {
+    if (Object.prototype.hasOwnProperty.call(action, "target")) {
+      fail("manifest.presentation.primaryAction.target is not allowed for kind 'settings'");
+    }
+    const settings = manifest.contributes?.settings;
+    const hasSettingsSchema = typeof settings?.schema === "string" && settings.schema.trim() !== "";
+    const hasSettingsUi = typeof settings?.ui === "string" && settings.ui.trim() !== "";
+    if (!hasSettingsSchema && !hasSettingsUi) {
+      fail("manifest.presentation.primaryAction kind 'settings' requires manifest.contributes.settings.schema or manifest.contributes.settings.ui");
+    }
+    return;
+  }
+  fail("manifest.presentation.primaryAction.kind must be webview or settings");
 }
 
 function validateBuiltEntry(packageDir, groupName, name, exportDef) {
@@ -885,7 +946,7 @@ function validateContributionContributions(packageDir, manifest, contributions =
     const label = `manifest.contributes.contributions[${index}]`;
     assertPlainObject(contribution, label);
     if (Object.prototype.hasOwnProperty.call(contribution, "visual")) {
-      fail(`${label}.visual is not supported in runtime API 2.3; use metadata, resources, or service references`);
+      fail(`${label}.visual is not supported in runtime API 2.4; use metadata, resources, or service references`);
     }
     assertAllowedKeys(contribution, label, new Set([
       "id",
@@ -1004,8 +1065,9 @@ function validateNoEmbeddedNodeRuntime(packageDir) {
 function validatePackage(packageDir, { print = true } = {}) {
   auditInstallablePackageTree(packageDir);
   const manifest = readPackageManifest(packageDir);
-  validateRuntimeCompatibility(manifest);
+  const declaredRuntimeApi = validateRuntimeCompatibility(manifest);
   validateOptionalString(manifest.author, "manifest.author");
+  validatePresentation(manifest, declaredRuntimeApi);
   validateManifestPermissions(manifest);
   validatePackageV4(packageDir, manifest);
   validateNoEmbeddedNodeRuntime(packageDir);

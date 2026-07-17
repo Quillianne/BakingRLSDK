@@ -146,7 +146,8 @@ npm run docs:dev
 ## Compatibility
 
 This SDK targets BakingRL plugin package schema `bakingrl.plugin/4`, SDK
-version `2.3.1`, and `bakingrlApi: "2.3.0"` for the current V4 runtime
-contract. The helper CLI accepts only the `2.3.x` runtime API window, with
-`2.3.0` as the minimum supported version. There is no legacy path adapter or
+version `2.3.1`, and `bakingrlApi: "2.4.0"` for the current V4 runtime
+contract. The helper CLI accepts the `2.3.x` through `2.4.x` runtime API
+window, with `2.3.0` as the minimum supported version. Presentation metadata
+requires `bakingrlApi: "2.4.0"` or newer. There is no legacy path adapter or
 automatic storage migration in this SDK.

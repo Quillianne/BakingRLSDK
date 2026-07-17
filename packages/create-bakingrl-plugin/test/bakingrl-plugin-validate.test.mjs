@@ -133,7 +133,7 @@ function assertGeneratedV4Manifest(packageDir, expectedId) {
   const packageJson = readJson(join(packageDir, "package.json"));
   const listing = readJson(join(packageDir, "marketplace", "listing.json"));
   assert.equal(manifest.schemaVersion, "bakingrl.plugin/4");
-  assert.equal(manifest.bakingrlApi, "2.3.0");
+  assert.equal(manifest.bakingrlApi, "2.4.0");
   assert.equal(manifest.id, expectedId);
   assert.deepEqual(manifest.permissions, emptyPermissions());
   assert.equal(listing.schema, "bakingrl.plugin-listing/1");
@@ -163,7 +163,7 @@ function expectedIdForScaffold(name) {
 function baseManifest(overrides = {}) {
   return {
     schemaVersion: "bakingrl.plugin/4",
-    bakingrlApi: "2.3.0",
+    bakingrlApi: "2.4.0",
     id: "com.example.package",
     name: "Example Package",
     version: "1.0.0",
@@ -238,19 +238,78 @@ test("validator requires manifest schema V4", () => {
   assert.match(output, /schemaVersion must be bakingrl\.plugin\/4/);
 });
 
-test("validator accepts runtime API 2.3.x manifests", () => {
+test("validator accepts supported runtime API manifests", () => {
   validatePackage(baseManifest({ bakingrlApi: "2.3.0" }));
   validatePackage(baseManifest({ bakingrlApi: "2.3.99" }));
+  validatePackage(baseManifest({ bakingrlApi: "2.4.0" }));
+  validatePackage(baseManifest({ bakingrlApi: "2.4.99" }));
 });
 
-test("validator rejects every runtime API outside 2.3.x", () => {
+test("validator rejects runtime APIs outside the supported range", () => {
   const legacyOutput = validatePackageFailure(baseManifest({ bakingrlApi: "2.2.99" }));
-  assert.match(legacyOutput, /target host runtime API 2\.3\.x \(minimum 2\.3\.0\)/);
-  const futureOutput = validatePackageFailure(baseManifest({ bakingrlApi: "2.4.0" }));
-  assert.match(futureOutput, /target host runtime API 2\.3\.x \(minimum 2\.3\.0\)/);
+  assert.match(legacyOutput, /target host runtime API 2\.3\.x through 2\.4\.x/);
+  const futureOutput = validatePackageFailure(baseManifest({ bakingrlApi: "2.5.0" }));
+  assert.match(futureOutput, /target host runtime API 2\.3\.x through 2\.4\.x/);
 });
 
-test("validator accepts structured runtime API 2.3 permissions", () => {
+test("validator accepts package presentation metadata", () => {
+  validatePackage(baseManifest({
+    presentation: {
+      categories: ["integration", "streaming"],
+      primaryAction: { kind: "settings" }
+    },
+    contributes: {
+      settings: { ui: "settings" },
+      webviews: [
+        {
+          id: "settings",
+          entry: "dist/webviews/settings.js",
+          kind: "settings"
+        }
+      ]
+    }
+  }), (dir) => {
+    writeGeneratedEntry(dir, "dist/webviews/settings.js");
+  });
+});
+
+test("validator rejects package presentation before runtime API 2.4", () => {
+  const output = validatePackageFailure(baseManifest({
+    bakingrlApi: "2.3.99",
+    presentation: { categories: ["visuals"] }
+  }));
+  assert.match(output, /presentation requires manifest\.bakingrlApi 2\.4\.0 or newer/);
+});
+
+test("validator rejects a settings primary action without a settings schema or UI", () => {
+  const output = validatePackageFailure(baseManifest({
+    presentation: {
+      primaryAction: { kind: "settings" }
+    },
+    contributes: { settings: {} }
+  }));
+  assert.match(
+    output,
+    /primaryAction kind 'settings' requires manifest\.contributes\.settings\.schema or manifest\.contributes\.settings\.ui/
+  );
+});
+
+test("validator rejects invalid package presentation metadata", () => {
+  const categoryOutput = validatePackageFailure(baseManifest({
+    presentation: { categories: ["visuals", "visuals"] }
+  }));
+  assert.match(categoryOutput, /presentation\.categories contains duplicate category 'visuals'/);
+
+  const targetOutput = validatePackageFailure(baseManifest({
+    presentation: {
+      categories: ["broadcast"],
+      primaryAction: { kind: "webview", target: "missing" }
+    }
+  }));
+  assert.match(targetOutput, /references unknown contributes\.webviews id 'missing'/);
+});
+
+test("validator accepts structured runtime API permissions", () => {
   validatePackage(baseManifest({
     permissions: {
       bus: {
@@ -315,7 +374,7 @@ test("validator rejects malformed permission patterns and network endpoints", ()
   assert.match(schemeOutput, /network\.http\[0\]\.scheme must be one of http, https/);
 });
 
-test("validator accepts only relative runtime API 2.3 storage permission paths", () => {
+test("validator accepts only relative runtime API storage permission paths", () => {
   for (const path of ["plugin://self/*", "/absolute/*", "../escape/*", "nested\\windows/*"]) {
     const output = validatePackageFailure(baseManifest({
       permissions: {
@@ -327,7 +386,7 @@ test("validator accepts only relative runtime API 2.3 storage permission paths",
   }
 });
 
-test("validator accepts runtime API 2.3 surface webviews", () => {
+test("validator accepts runtime API surface webviews", () => {
   validatePackage(baseManifest({
     contributes: {
       webviews: [
@@ -423,7 +482,7 @@ test("validator rejects removed host-owned visual surfaces", () => {
       visuals: []
     }
   }));
-  assert.match(output, /contributes\.visuals is not supported in runtime API 2\.3/);
+  assert.match(output, /contributes\.visuals is not supported in runtime API 2\.4/);
 });
 
 test("validator rejects legacy contribution groups", () => {
@@ -557,7 +616,7 @@ test("validator rejects contribution visual references", () => {
       ]
     }
   }));
-  assert.match(output, /contributions\[0\]\.visual is not supported in runtime API 2\.3/);
+  assert.match(output, /contributions\[0\]\.visual is not supported in runtime API 2\.4/);
 });
 
 test("validator accepts settings UI backed by a settings webview", () => {
@@ -754,7 +813,7 @@ test("submission command emits review input without catalogue approval fields", 
     const submission = readJson(outputPath);
     assert.equal(submission.schema, "bakingrl.marketplace-submission/1");
     assert.equal(submission.packageId, "com.example.package");
-    assert.equal(submission.runtimeApi, "2.3.0");
+    assert.equal(submission.runtimeApi, "2.4.0");
     assert.equal(submission.artifacts[0].platform, "windows-x64");
     assert.match(submission.artifacts[0].bundleSha256, /^[a-f0-9]{64}$/);
     assert.equal(submission.listing.schema, "bakingrl.plugin-listing/1");
@@ -1726,7 +1785,7 @@ test("pack rejects package symlinks without reading or archiving their external 
   });
 });
 
-test("scaffolder creates valid runtime 2.3 package templates", () => {
+test("scaffolder creates valid runtime 2.4 package templates", () => {
   withTempDir((root) => {
     const extension = scaffoldPackage(root, "extension-template", "extension-plugin");
     writeGeneratedEntry(extension, "dist/extension/index.js");

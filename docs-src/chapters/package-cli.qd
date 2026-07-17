@@ -32,7 +32,7 @@ Available templates:
   SVG content to another package.
 
 Generated packages declare `schemaVersion: "bakingrl.plugin/4"`, and
-`bakingrlApi: "2.3.0"`. They include an explicit empty permission declaration
+`bakingrlApi: "2.4.0"`. They include an explicit empty permission declaration
 and an author-owned `marketplace/listing.json` ready to edit.
 
 ## Validate
@@ -67,7 +67,7 @@ Current validation accepts `contributes.extensionPoints`,
 `contributes.contributions`, `contributes.resources`, and
 `contributes.webviews`. A contribution targeting another package must declare a
 matching top-level dependency. Runtime API validation accepts manifests in the
-`2.3.x` window, with `2.3.0` as the minimum, and rejects every other target.
+`2.3.x` through `2.4.x` window, with `2.3.0` as the minimum, and rejects every other target.
 
 `doctor`, `pack`, and `install-local` add a static Node runtime preflight. They
 copy only bundle-eligible files to an isolated staging directory, syntax-check

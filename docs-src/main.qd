@@ -11,7 +11,7 @@ left navigation to move between sections and the right navigation for the table
 of contents of the current page.
 
 The current SDK version is `2.3.1`. Generated packages declare
-`bakingrlApi: "2.3.0"` for the current V4 runtime contract.
+`bakingrlApi: "2.4.0"` for the current V4 runtime contract.
 
 ## Start Here
 

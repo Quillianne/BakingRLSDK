@@ -1,10 +1,17 @@
 {
   "schemaVersion": "bakingrl.plugin/4",
-  "bakingrlApi": "2.3.0",
+  "bakingrlApi": "2.4.0",
   "id": "__PLUGIN_ID__",
   "name": "__PLUGIN_NAME__",
   "version": "1.0.0",
   "author": "Your Name",
+  "presentation": {
+    "categories": ["utility"],
+    "primaryAction": {
+      "kind": "webview",
+      "target": "home"
+    }
+  },
   "permissions": {
     "bus": { "read": [], "publish": [] },
     "registry": { "read": [], "write": [] },

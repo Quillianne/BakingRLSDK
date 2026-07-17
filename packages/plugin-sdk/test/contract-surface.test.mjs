@@ -45,20 +45,22 @@ test("exports SDK and runtime API contract constants", () => {
   const packageJson = JSON.parse(readFileSync(resolve(packageDir, "package.json"), "utf8"));
 
   assert.equal(SDK_VERSION, packageJson.version);
-  assert.equal(RUNTIME_API_VERSION, "2.3.0");
+  assert.equal(RUNTIME_API_VERSION, "2.4.0");
   assert.equal(MIN_SUPPORTED_RUNTIME_API_VERSION, "2.3.0");
 });
 
 test("exports manifest V4 author-facing declarations", () => {
   const declarations = readFileSync(resolve(packageDir, "dist", "index.d.ts"), "utf8");
 
-  assert.match(declarations, /export type BakingRLCompatibleApiVersion = `2\.3\.\$\{number\}`;/);
+  assert.match(declarations, /export type BakingRLCompatibleApiVersion = `2\.\$\{3 \| 4\}\.\$\{number\}`;/);
   assert.match(declarations, /export type PluginManifestV4Contributes = \{/);
   assert.match(declarations, /contributions\?: ContributionContribution\[\];/);
   assert.match(declarations, /resources\?: ContributionResource\[\];/);
   assert.match(declarations, /export type PluginManifestV4 = \{/);
   assert.match(declarations, /schemaVersion: "bakingrl\.plugin\/4";/);
   assert.match(declarations, /bakingrlApi: BakingRLCompatibleApiVersion;/);
+  assert.match(declarations, /export type PluginPresentation = \{[\s\S]*categories\?: string\[\];[\s\S]*primaryAction\?: PluginPrimaryAction;/);
+  assert.match(declarations, /presentation\?: PluginPresentation;/);
   assert.match(declarations, /permissions\?: PluginPermissions;/);
   assert.match(declarations, /export type PluginGraphResource = ContributionResource & \{/);
   assert.match(declarations, /public: boolean;/);

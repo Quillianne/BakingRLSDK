@@ -1,7 +1,7 @@
 import type { RlTelemetryEventName, RlTelemetryPayloadByEvent } from "./telemetry.js";
 
 export const SDK_VERSION = "2.3.1";
-export const RUNTIME_API_VERSION = "2.3.0";
+export const RUNTIME_API_VERSION = "2.4.0";
 export const MIN_SUPPORTED_RUNTIME_API_VERSION = "2.3.0";
 
 export * from "./telemetry.js";
@@ -494,7 +494,7 @@ export type RuntimeDeclaration = {
 };
 
 export type RuntimeRef = "node" | `sidecar:${string}`;
-export type BakingRLCompatibleApiVersion = `2.3.${number}`;
+export type BakingRLCompatibleApiVersion = `2.${3 | 4}.${number}`;
 export type ExtensionPointTarget = `${string}/${string}`;
 export type ResourceVisibility = "public" | "private";
 
@@ -632,6 +632,21 @@ export type SurfaceDeclaration = {
 
 export type ContributionWebview = StandardContributionWebview | SurfaceDeclaration;
 
+export type PluginPrimaryAction =
+  | {
+      kind: "webview";
+      target: string;
+    }
+  | {
+      kind: "settings";
+      target?: never;
+    };
+
+export type PluginPresentation = {
+  categories?: string[];
+  primaryAction?: PluginPrimaryAction;
+};
+
 export type PluginManifestV4Contributes = {
   settings?: ContributionSettings;
   services?: ContributionService[];
@@ -651,6 +666,7 @@ export type PluginManifestV4 = {
   bakingrlApi: BakingRLCompatibleApiVersion;
   permissions?: PluginPermissions;
   dependencies?: PluginDependency[];
+  presentation?: PluginPresentation;
   runtime?: RuntimeDeclaration;
   contributes?: PluginManifestV4Contributes;
 };
