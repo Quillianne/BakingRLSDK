@@ -5,7 +5,7 @@
 
 The SDK package is `@bakingrl/plugin-sdk`. It describes the trusted v4 plugin
 contract used by current BakingRL hosts: manifest schema `bakingrl.plugin/4`,
-SDK `2.3.0`, and `bakingrlApi: "2.3.0"` for new packages.
+SDK `2.3.1`, and `bakingrlApi: "2.3.0"` for new packages.
 
 The SDK is an authoring contract. Runtime behavior is provided by the host:
 package loading, extension host supervision, bridge calls, service routing,
@@ -294,7 +294,7 @@ approved key ids and statuses. Neither type defines the signed catalogue.
 
 ## Utilities
 
-`SDK_VERSION` is `2.3.0`.
+`SDK_VERSION` is `2.3.1`.
 
 `RUNTIME_API_VERSION` and `MIN_SUPPORTED_RUNTIME_API_VERSION` are both `2.3.0`,
 matching the manifest value `bakingrlApi: "2.3.0"` used by new packages. Only

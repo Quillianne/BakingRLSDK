@@ -65,7 +65,7 @@ npm run pack
 Published scaffolds use the published SDK package:
 
 ```json
-"@bakingrl/plugin-sdk": "^2.3.0"
+"@bakingrl/plugin-sdk": "^2.3.1"
 ```
 
 ## Local Global Install
@@ -146,7 +146,7 @@ npm run docs:dev
 ## Compatibility
 
 This SDK targets BakingRL plugin package schema `bakingrl.plugin/4`, SDK
-version `2.3.0`, and `bakingrlApi: "2.3.0"` for the current V4 runtime
+version `2.3.1`, and `bakingrlApi: "2.3.0"` for the current V4 runtime
 contract. The helper CLI accepts only the `2.3.x` runtime API window, with
 `2.3.0` as the minimum supported version. There is no legacy path adapter or
 automatic storage migration in this SDK.

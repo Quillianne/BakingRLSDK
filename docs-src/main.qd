@@ -10,7 +10,7 @@ This site is generated as a multi-page Quarkdown documentation site. Use the
 left navigation to move between sections and the right navigation for the table
 of contents of the current page.
 
-The current SDK version is `2.3.0`. Generated packages declare
+The current SDK version is `2.3.1`. Generated packages declare
 `bakingrlApi: "2.3.0"` for the current V4 runtime contract.
 
 ## Start Here
